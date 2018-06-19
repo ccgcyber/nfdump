@@ -3,7 +3,7 @@
 
 AC_PREREQ(2.59)
 AC_REVISION($Revision: 243 $)dnl 
-AC_INIT(nfdump, 1.6.16, peter@people.ops-trust.net)
+AC_INIT(nfdump, 1.6.17, peter@people.ops-trust.net)
 # $Date: 2014-11-16 14:10:20 +0100 (Sun, 16 Nov 2014) $
 #AC_CONFIG_SRCDIR([grammar.y])
 AC_CONFIG_HEADER([config.h])
@@ -189,8 +189,10 @@ AS_IF([test "x$influxdb" = xyes], [
 	AC_CHECK_LIB([curl], [curl_free],,[AC_MSG_ERROR([libcurl required!])])
 	
 	AC_DEFINE_UNQUOTED(HAVE_INFLUXDB, 1, [enable stats to influxdb])
-], [ 
-])
+	AM_CONDITIONAL(INFLXDB, true)
+], 
+AM_CONDITIONAL(INFLXDB, false)
+)
 
 AC_ARG_ENABLE(nftrack,
 [  --enable-nftrack      Build nftrack used by PortTracker; default is NO],

@@ -1,6 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2014, Peter Haag
+ *  Copyright (c) 2018, 2017 Peter Haag
  *  Copyright (c) 2009, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
@@ -29,13 +28,6 @@
  *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
  *  POSSIBILITY OF SUCH DAMAGE.
  *  
- *  $Author: haag $
- *
- *  $Id: nfdump.c 69 2010-09-09 07:17:43Z haag $
- *
- *  $LastChangedRevision: 69 $
- *	
- *
  */
 
 #include "config.h"
@@ -311,6 +303,7 @@ static void usage(char *name) {
 					"\t\t long     Standard output line format with additional fields.\n"
 					"\t\t extended Even more information.\n"
 					"\t\t csv      ',' separated, machine parseable output format.\n"
+					"\t\t json     json output format.\n"
 					"\t\t pipe     '|' separated legacy machine parseable output format.\n"
 					"\t\t\tmode may be extended by '6' for full IPv6 listing. e.g.long6, extended6.\n"
 					"-E <file>\tPrint exporter ans sampling info for collected flows.\n"
@@ -549,7 +542,11 @@ int	v1_map_done = 0;
 							exit(255);
 						}
 					}
-					ConvertCommonV0((void *)record_ptr, (common_record_t *)ConvertBuffer);
+					if ( !ConvertCommonV0((void *)record_ptr, (common_record_t *)ConvertBuffer) ) {
+						LogError("Corrupt data file. Unable to decode at %s line %d\n", __FILE__, __LINE__);
+						exit(255);
+
+					}
 					flow_record = (common_record_t *)ConvertBuffer;
 					dbg_printf("Converted type %u to %u record\n", CommonRecordV0Type, CommonRecordType);
 				case CommonRecordType: {
@@ -1056,6 +1053,11 @@ char 		Ident[IDENTLEN];
 			print_format = DefaultMode;
 	}
 
+	// limit input chars
+	if ( strlen(print_format) > 512 ) {
+		LogError("Length of ouput format string too big - > 512\n");
+		exit(255);
+	}
 	if ( strncasecmp(print_format, "fmt:", 4) == 0 ) {
 		// special user defined output format
 		char *format = &print_format[4];

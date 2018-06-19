@@ -1,8 +1,8 @@
 # nfdump
 
-Stable Release v1.6.16
+Stable Release v1.6.17
 
-See the Changelog file for all changes in release 1.6.16
+See the Changelog file for all changes in release 1.6.17
 
 nfdump is a toolset in oder to collect and process netflow and sflow data, sent from netflow/sflow compatible devices. 
 The toolset supports netflow __v1__, __v5/v7__,__v9__,__IPFIX__ and __SFLOW__.  nfdump supports IPv4 as well as IPv6.
@@ -35,8 +35,8 @@ does not support the full IPFIX definition.
 
 ### Building and config options
 
-The toolset is build upon the autotools framework. Run __./autogen.sh__ first.
-Afterwards __./configure ./make__ and __./make install__ should do the trick.
+The toolset is build upon the autotools framework. Run `./autogen.sh` first.
+Afterwards `./configure` `make` and `make install` should do the trick.
 
 The following config options are available:
 
