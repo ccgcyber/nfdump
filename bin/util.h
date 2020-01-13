@@ -1,8 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2016, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -69,6 +66,12 @@
 #endif
 #endif
 
+#if ( SIZEOF_VOID_P == 8 )
+typedef uint64_t	pointer_addr_t;
+#else
+typedef uint32_t	pointer_addr_t;
+#endif
+
 #define _1KB (double)(1000.0)
 #define _1MB (double)(1000.0 * 1000.0)
 #define _1GB (double)(1000.0 * 1000.0 * 1000.0)
@@ -115,5 +118,9 @@ void SetupInputFileSequence(char *multiple_dirs, char *single_file, char *multip
 char *GetCurrentFilename(void);
 
 void Setv6Mode(int mode);
+
+void inet_ntop_mask(uint32_t ipv4, int mask, char *s, size_t sSize);
+
+void inet6_ntop_mask(uint64_t ipv6[2], int mask, char *s, size_t sSize);
 
 #endif //_UTIL_H

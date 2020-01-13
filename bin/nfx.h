@@ -58,6 +58,7 @@ typedef struct extension_descriptor_s {
 typedef struct extension_info_s {
 	struct extension_info_s *next;
 	extension_map_t	*map;
+	extension_map_t	*exportMap;
 	uint32_t		ref_count;
 	uint32_t		*offset_cache;
 	master_record_t	master_record;
@@ -83,8 +84,6 @@ int Insert_Extension_Map(extension_map_list_t *extension_map_list, extension_map
 void SetupExtensionDescriptors(char *options);
 
 void PrintExtensionMap(extension_map_t *map);
-
-int VerifyExtensionMap(extension_map_t *map);
 
 void DumpExMaps(char *filename);
 

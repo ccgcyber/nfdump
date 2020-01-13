@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
+ *  Copyright (c) 2019, Peter Haag
  *  All rights reserved.
  *  
  *  Redistribution and use in source and binary forms, with or without 
@@ -28,6 +28,13 @@
  *  
  */
 
+#ifndef _OUTPUT_JSON_H
+#define _OUTPUT_JSON_H 1
+
+void json_prolog(void);
+
+void json_epilog(void);
 
 void flow_record_to_json(void *record, char **s, int tag);
 
+#endif // _OUTPUT_JSON_H

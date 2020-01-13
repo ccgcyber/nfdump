@@ -1,7 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2019, Peter Haag
  *  Copyright (c) 2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -102,7 +100,7 @@ typedef struct file_header_s {
 #define FLAG_NOT_COMPRESSED	0x0		// records are not compressed
 #define FLAG_LZO_COMPRESSED	0x1		// records are LZO compressed
 #define FLAG_ANONYMIZED 	0x2		// flow data are anonimized 
-#define FLAG_CATALOG		0x4		// has a file catalog record after stat record
+#define FLAG_UNUSED			0x4		// unused
 #define FLAG_BZ2_COMPRESSED 0x8		// records are BZ2 compressed
 #define FLAG_LZ4_COMPRESSED 0x10	// records are LZ4 compressed
 #define COMPRESSION_MASK	0x19	// all compression bits
@@ -165,9 +163,6 @@ typedef struct stat_header_s {
 } stat_header_t;
 
 
-// Netflow v9 field type/values
-
-
 /*
  *
  * Block type 2:
@@ -207,37 +202,6 @@ typedef struct L_record_header_s {
  	uint32_t	type;
  	uint32_t	size;
 } L_record_header_t;
-
-/*
- *
- * Catalog Block
- * =============
- * introduces a file catalog for nfdump files. Not yet really used in nfdump-1.6.x
- * The catalog will get implemented later - most likely 1.7
- * The flag FLAG_CATALOG is used to flag the file for having a catalog
- * 
- */
-
-#define CATALOG_BLOCK	4
-
-typedef struct catalog_s {
-	uint32_t	NumRecords;		// set to the number of catalog entries
-	uint32_t	size;			// sizeof(nffile_catalog_t) without this header (-12)
-	uint16_t	id;				// Block ID == CATALOG_BLOCK
-	uint16_t	pad;			// unused align 32 bit
-
-	off_t		reserved;		// reserved, set to 0;
-
-	// catalog data
-	struct catalog_entry_s {
-		uint32_t	type;		// what catalog type does the entry point to
-// type = 0 reserved
-#define EXPORTER_table	1
-#define MAX_CATALOG_ENTRIES 16
-		off_t		offset;			// point to a data block with standard header data_block_header_t
-	} entries[MAX_CATALOG_ENTRIES];	// the number of types we currently have defined - may grow in future
-
-} catalog_t;
 
 /*
  * Generic file handle for reading/writing files
@@ -399,35 +363,7 @@ typedef struct common_record_s {
  	uint32_t	data[1];
 } common_record_t;
 
-typedef struct common_record_v0_s {
- 	// record head
- 	uint16_t	type;
- 	uint16_t	size;
-
-	// record meta data
-	uint8_t		flags;
-	uint8_t		exporter_sysid;
- 	uint16_t	ext_map;
-
-	// netflow common record
- 	uint16_t	msec_first;
- 	uint16_t	msec_last;
- 	uint32_t	first;
- 	uint32_t	last;
- 
- 	uint8_t		fwd_status;
- 	uint8_t		tcp_flags;
- 	uint8_t		prot;
- 	uint8_t		tos;
- 	uint16_t	srcport;
- 	uint16_t	dstport;
-
-	// link to extensions
- 	uint32_t	data[1];
-} common_record_v0_t;
-
 #define COMMON_RECORD_DATA_SIZE   (sizeof(common_record_t) - sizeof(uint32_t) )
-#define COMMON_RECORDV0_DATA_SIZE (sizeof(common_record_v0_t) - sizeof(uint32_t) )
 
 #define COMMON_BLOCK	0
 
@@ -881,7 +817,7 @@ typedef struct tpl_ext_21_s {
  * +----+--------------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+
  * |  3 |      0       |             MPLS_LABEL_8 (77)              |       0      |              MPLS_LABEL_7 (76)             |
  * +----+--------------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+
- * |  3 |      0       |             MPLS_LABEL_10 (79)             |       0      |              MPLS_LABEL_9 (78)             |
+ * |  4 |      0       |             MPLS_LABEL_10 (79)             |       0      |              MPLS_LABEL_9 (78)             |
  * +----+--------------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+
  */
 #define EX_MPLS 22	
@@ -988,7 +924,7 @@ typedef struct tpl_ext_27_s {
 /*
  * NSEL Common block
  * +----+--------------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+
- * |  0 |                                           NF_F_FLOW_CREATE_TIME_MSEC(152)                                             |
+ * |  0 |                                              NF_F_EVENT_TIME_MSEC(323)                                                |
  * +----+--------------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+
  * |  1 |                      NF_F_CONN_ID(148)                    |i type(176/8) |i code(177/9) |EVT(40005/233)|    fill      |
  * +----+--------------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+
@@ -2139,41 +2075,6 @@ typedef struct type_mask_s {
  * 				for IPv4 netflow v5/v7	12
  */
 
-/*
- * exporter records
- */
-
-#ifdef COMPAT15
-/*
- * Data block type 1 compatibility
- */
- 
-typedef struct common_record_v1_s {
-    // the head of each data record
-    uint32_t    flags;
-    uint16_t    size;
-    uint16_t    exporter_ref;
-    uint16_t    msec_first;
-    uint16_t    msec_last;
-    uint32_t    first;
-    uint32_t    last;
-
-    uint8_t     dir;
-    uint8_t     tcp_flags;
-    uint8_t     prot;
-    uint8_t     tos;
-    uint16_t    input;
-    uint16_t    output;
-    uint16_t    srcport;
-    uint16_t    dstport;
-    uint16_t    srcas;
-    uint16_t    dstas;
-    uint8_t     data[4];    // .. more data below
-} common_record_v1_t;
-
-#endif
-
-
 void SumStatRecords(stat_record_t *s1, stat_record_t *s2);
 
 nffile_t *OpenFile(char *filename, nffile_t *nffile);
@@ -2205,10 +2106,6 @@ int RenameAppend(char *from, char *to);
 void ModifyCompressFile(char * rfile, char *Rfile, int compress);
 
 void ExpandRecord_v1(common_record_t *input_record,master_record_t *output_record );
-
-#ifdef COMPAT15
-void Convert_v1_to_v2(void *mem);
-#endif
 
 #endif //_NFFILE_H
 

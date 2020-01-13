@@ -1,7 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2019, Peter Haag
  *  All rights reserved.
  *  
  *  Redistribution and use in source and binary forms, with or without 
@@ -196,6 +194,7 @@ typedef struct ipfix_template_elements_e_s {
 #define _8bytes   8
 #define _16bytes  16
 
+#define SKIP_ELEMENT						  0
 // IPFIX std element definitios
 // Flowset record types
 #define IPFIX_octetDeltaCount	 			  1
@@ -232,14 +231,12 @@ typedef struct ipfix_template_elements_e_s {
 // deprecated elements for sampling 
 #define IPFIX_samplingInterval				 34
 #define IPFIX_samplingAlgorithm				 35
-// 1 - Deterministic Sampling,
-// 2 - Random Sampling.
 
-#define IPFIX_samplingPacketInterval		305
-#define IPFIX_selectorAlgorithm				304
+// depricated 38, 39
 
-// reserved 38, 39
-// reserved 48, 49, 50, 51
+#define IPFIX_samplerId						48
+#define IPFIX_samplerMode					49
+#define IPFIX_samplerRandomInterval			50
 
 // #define IPFIX_MIN_TTL			52
 // #define IPFIX_MAX_TTL			53
@@ -270,10 +267,22 @@ typedef struct ipfix_template_elements_e_s {
 #define IPFIX_octetTotalCount		 	 	 85
 #define IPFIX_packetTotalCount		 	 	 86
 #define IPFIX_forwardingStatus				 89
+#define IPFIX_flowStartSeconds				150
+#define IPFIX_flowEndSeconds				151
 #define IPFIX_flowStartMilliseconds			152
 #define IPFIX_flowEndMilliseconds			153
 #define IPFIX_flowStartDeltaMicroseconds	158
 #define IPFIX_flowEndDeltaMicroseconds		159
+#define IPFIX_postOctetTotalCount	 	 	171
+#define IPFIX_postPacketTotalCount	 	 	172
+
+// sampling
+#define IPFIX_selectorId					302
+#define IPFIX_selectorAlgorithm				304
+#define IPFIX_samplingPacketInterval		305
+
+// Private Enterprise Numbers
+#define IPFIX_ReverseInformationElement		29305
 
 /* prototypes */
 int Init_IPFIX(void);

@@ -1,7 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2019, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -37,18 +35,15 @@
 #include "config.h"
 
 #include <sys/types.h>
+#include <time.h>
+
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
 #endif
-#include <time.h>
 
 typedef void (*printer_t)(void *, char **, int);
-
-#if ( SIZEOF_VOID_P == 8 )
-typedef uint64_t	pointer_addr_t;
-#else
-typedef uint32_t	pointer_addr_t;
-#endif
+typedef void (*func_prolog_t)(void);
+typedef void (*func_epilog_t)(void);
 
 typedef struct msec_time_s {
 	time_t		sec;
@@ -62,9 +57,11 @@ typedef struct common_flow_header {
 } common_flow_header_t;
 
 typedef struct printmap_s {
-	char		*printmode;		// name of the output format
-	printer_t	func;			// name of the function, which prints the record
-	char		*Format;		// output format definition
+	char		  *printmode;	// name of the output format
+	printer_t	  func_record;			// prints the record
+	func_prolog_t func_prolog;	// prints the output prolog
+	func_epilog_t func_epilog;	// prints the output epilog
+	char		  *Format;		// output format definition
 } printmap_t;
 
 #define NSEL_EVENT_IGNORE 0LL
@@ -80,42 +77,17 @@ typedef struct printmap_s {
 
 /* prototypes */
 
-int InitSymbols(void);
-
 void Setv6Mode(int mode);
 
 int Getv6Mode(void);
 
-int Proto_num(char *protostr);
+void text_prolog(void);
 
-void format_file_block_header(void *header, char **s, int tag);
-
-char *format_csv_header(void);
-
-char *get_record_header(void);
-
-void set_record_header(void);
-
-void format_file_block_record(void *record, char **s, int tag);
-
-void flow_record_to_pipe(void *record, char ** s, int tag);
-
-void flow_record_to_csv(void *record, char ** s, int tag);
-
-void flow_record_to_null(void *record, char ** s, int tag);
+void text_epilog(void);
 
 int ParseOutputFormat(char *format, int plain_numbers, printmap_t *printmap);
 
 void format_special(void *record, char ** s, int tag);
-
-
-uint32_t Get_fwd_status_id(char *status);
-
-char *Get_fwd_status_name(uint32_t id);
-
-void Proto_string(uint8_t protonum, char *protostr);
-
-void condense_v6(char *s);
 
 #define TAG_CHAR ''
 

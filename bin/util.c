@@ -1,7 +1,5 @@
 /*
- *  Copyright (c) 2016, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -43,6 +41,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/select.h>
+#include <arpa/inet.h>
 
 #ifndef SYSLOG_NAMES
 #	define SYSLOG_NAMES 1
@@ -422,8 +421,8 @@ static char timestring[16];
 
 	when = localtime(&t);
 	when->tm_isdst = -1;
-	snprintf(timestring, 15, "%i%02i%02i%02i%02i", 
-		when->tm_year + 1900, when->tm_mon + 1, when->tm_mday, when->tm_hour, when->tm_min);
+	snprintf(timestring, 15, "%i%02i%02i%02i%02i%02i", 
+		when->tm_year + 1900, when->tm_mon + 1, when->tm_mday, when->tm_hour, when->tm_min, when->tm_sec);
 	timestring[15] = '\0';
 
 	return timestring;
@@ -443,11 +442,12 @@ time_t		t;
 	when.tm_yday = 0;
 	when.tm_isdst = -1;
 
-	if ( strlen(timestring) != 12 ) {
+	size_t len = strlen(timestring);
+	if ( len != 12 && len != 14) {
 		LogError( "Wrong time format '%s'\n", timestring);
 		return 0;
 	}
-	// 2006 05 05 12 00
+	// 2019 05 05 12 00 (10)
 	// year
 	p = timestring;
 	c = p[4];
@@ -478,8 +478,16 @@ time_t		t;
 	
 	// minute
 	p += 2;
+	c = p[2];
+	p[2] = '\0';
 	when.tm_min = atoi(p);
+	p[2] = c;
 	
+	if ( len == 14 ) {
+		p += 2;
+		when.tm_sec = atoi(p);
+	}
+
 	t = mktime(&when);
 	if ( t == -1 ) {
 		LogError( "Failed to convert string '%s'\n", timestring);
@@ -558,4 +566,35 @@ double f = num;
 
 } // End of format_number
 
+void inet_ntop_mask(uint32_t ipv4, int mask, char *s, size_t sSize) {
 
+	if ( mask ) {
+		ipv4 &= 0xffffffffL << ( 32 - mask );
+		ipv4 = htonl(ipv4);
+		inet_ntop(AF_INET, &ipv4, s, sSize);
+	} else {
+		s[0] = '\0';
+	}
+
+} // End of inet_ntop_mask
+
+void inet6_ntop_mask(uint64_t ipv6[2], int mask, char *s, size_t sSize) {
+    uint64_t ip[2];
+
+    ip[0] = ipv6[0];
+    ip[1] = ipv6[1];
+    if ( mask ) {
+        if ( mask <= 64 ) {
+            ip[0] = ip[0] & (0xffffffffffffffffLL << (64 - mask));
+            ip[1] = 0;
+        } else {
+            ip[1] = ip[1] & (0xffffffffffffffffLL << (128 - mask));
+        }
+        ip[0] = htonll(ip[0]);
+        ip[1] = htonll(ip[1]);
+        inet_ntop(AF_INET6, ip, s, sSize);
+
+    } else {
+        s[0] = '\0';
+    }
+} // End of inet_ntop_mask

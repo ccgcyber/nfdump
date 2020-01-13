@@ -1,11 +1,14 @@
 # nfdump
 
-Stable Release v1.6.17
+Stable Release v1.6.18
 
-See the Changelog file for all changes in release 1.6.17
+See the Changelog file for all changes in release 1.6.18
 
-nfdump is a toolset in oder to collect and process netflow and sflow data, sent from netflow/sflow compatible devices. 
+nfdump is a toolset in order to collect and process netflow and sflow data, sent from netflow/sflow compatible devices. 
 The toolset supports netflow __v1__, __v5/v7__,__v9__,__IPFIX__ and __SFLOW__.  nfdump supports IPv4 as well as IPv6.
+
+__Note:__ nfdump 1.6.18 __not longer__ supports nfdump-1.5.x files. If you have nfdump-1.5.x please convert them
+before upgrading.
 
 nfdump is used as backend toolset for __NfSen__.
 
@@ -13,9 +16,12 @@ nfdump is used as backend toolset for __NfSen__.
 
 ## NSEL/ASA, NEL/NAT support
 
-__NSEL__ (* Network Event Security Logging *) as well as NEL (* NAT Event Logging *) are technologies invented by __CISCO__ and also use the netflow v9 protocol. However, NSEL and NEL are not flows as commonly known but rather *__Events__!* exported from specific devices such as CISCO ASA. nfdump supports Event looging as part of netflow v9.
+__NSEL__ (Network Event Security Logging) as well as NEL (NAT Event Logging) are technologies invented by __CISCO__ and also use the netflow v9 protocol. However, NSEL and NEL are not flows as commonly known but rather *__Events__!* exported from specific devices such as CISCO ASA. nfdump supports Event looging as part of netflow v9.
 
 __Note:__ The older nfdump-1.5.8-2-NSEL is __not compatible__ with nfdump > 1.6.9 which supports NSEL/NEL.
+
+__Jun OS NAT Event Logging__ is mostly compatible with CISCO's NAT Event Logging - mostly - it needs another data interpretation.
+See __--enable-jnat__ below
 
 ---
 
@@ -42,6 +48,8 @@ The following config options are available:
 
 *  __--enable-nsel__   
 Compile nfdump, to read and process NSEL/NEL event data; default is __NO__
+*  __--enable-jnat__   
+compile nfdump, to read and process JunOS NAT event logging __NO__
 * __--enable-ftconv__  
 Build the flow-tools to nfdump converter; default is __NO__
 * __--enable-sflow__  
@@ -50,8 +58,9 @@ Build sflow collector sfcpad; default is __NO__
 Build nfprofile used by NfSen; default is __NO__
 * __--enable-nftrack__  
 Build nftrack used by PortTracker; default is __NO__
-* __--enable-compat15__  
-Build nfdump, to read nfdump data files created with nfdump 1.5.x; default is __NO__
+
+This code no longer reads nfdump-1.5.x data files. If needed use nfdump up
+to v1.6.17
 
 Development and beta options
 
@@ -60,7 +69,7 @@ Insert lots of debug and development code into nfdump for testing and debugging;
 * __--enable-readpcap__  
 Add code to nfcapd to read flow data also from pcap files; default is __NO__  
 * __--enable-nfpcapd__  
-Build experimental nfpcapd collector to create netflow data from interface traffic or precollected pcap traffic, similar to softflowd; default is __NO__
+Build nfpcapd collector to create netflow data from interface traffic or precollected pcap traffic, similar to softflowd; default is __NO__
 
 
 ### The tools
@@ -81,7 +90,7 @@ flows. The output format is user selectable and also includes a simple
 csv format for post processing.
 
 __nfanon__ - anonymize netflow records  
-IP addresses in flow records are anonimized using the CryptoPAn methode.
+IP addresses in flow records are anonimized using the CryptoPAn method.
 
 __nfexpire__ - expire old netflow data  
 Manages data expiration. Sets appropriate limits. Used by NfSen.
@@ -91,6 +100,11 @@ Reads the netflow data from the files stored by nfcapd and sends it
 over the network to another host.
 
 #### Optional binaries:
+
+__nfpcapd__ - pcap to netflow collector daemon  
+nfpcapd listens on a network interface, or reads precollected pcap traffic 
+and stores flow records into nfcapd comaptible files. It is nfcapd's
+companion to convert traffic directly into nfdump records.
 
 __sfcapd__ - sflow collector daemon  
 scfapd collects sflow data and stores it into nfcapd comaptible files.
@@ -127,8 +141,8 @@ More fields may be integrated in future versions of sfcapd.
 
 ### Compression
 Binary data files can optionally be compressed using either the fast LZO1X-1 compression, 
-LZ4 or the efficient but slow bzip2 methode. 
-If you compress automatically flows while they are collected, LZO1X-1 or LZ4 methodes are
+LZ4 or the efficient but slow bzip2 method. 
+If you compress automatically flows while they are collected, LZO1X-1 or LZ4 methods are
 recommended. bzip2 uses about 30 times more CPU than LZO1X-1. Use bzip2 to archive netflow
 data, which may reduce the disk usage again by a factor of 2. The compression of flow files 
 can be changed any time with nfdump -J <num>
@@ -392,7 +406,7 @@ Extensions: nfcapd supports a large number of v9 tags. In order to optimise
 disk space and performance, v9 tags are grouped into a number of extensions
 which may or may not be stored into the data file. Therefore the v9 templates configured on the exporter may be tuned with the collector. Only the tags common to both are stored into the data files. Extensions can be switch on/off by using the -T option. If you want to collect all data, use __-Tall__
 
-###Sampling
+### Sampling
 By default, the sampling rate is set to 1 (unsampled) or to 
 any given value specified by the -s cmd line option. If sampling information is found 
 in the netflow stream, it overwrites the default value. Sampling is automatically 
@@ -403,7 +417,7 @@ netflow data, even if sampling is configured. The number of bytes/packets in eac
 netflow record is automatically multiplied by the sampling rate. The total number of 
 flows is not changed as this is not accurate enough. (Small flows versus large flows)
 
-###InfluxDB
+### InfluxDB
 You can send nfprofile stats data to an influxdb database. The data are the same of rrd files.
 For enable this option you need libcurl dev package installed, use --enable-influxdb for configure the project and the nfprofile command should be invoked with option: -i <influxurl> . 
 Example: -i http://localhost:8086/write?db=mydb&u=user&p=pass 

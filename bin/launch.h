@@ -1,7 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2019, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -37,18 +35,19 @@
 #include "config.h"
 
 #include <time.h>
+#include <sys/param.h>
+#include "collector.h"
+#include "nffile.h"
 
-#define FNAME_SIZE	256
-#define IDENT_SIZE	32
+#define MAXTIMESTRING 24
 
 typedef struct srecord_s {
-	char	fname[FNAME_SIZE];		// file name
-	char	subdir[FNAME_SIZE];		// subdir name
-	char	ident[IDENT_SIZE];		// -I ident string
-	char	tstring[16];			// actually 12 needed e.g. 200411011230
+	char	fname[MAXPATHLEN];		// %f file name
+	char	tstring[MAXTIMESTRING];	// %t 14 needed for YYYYmmddHHMMSS + opt. timezone
 	time_t	tstamp;					// UNIX time stamp
+	int		failed;					// in case of an error
 } srecord_t;
 
-void launcher (char *commbuff, char *datadir, char *process, int expire);
+void launcher (void *commbuff, FlowSource_t *FlowSource, char *process, int expire);
 
 #endif //_LAUNCH_H

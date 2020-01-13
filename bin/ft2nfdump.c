@@ -1,9 +1,6 @@
 /*
  *  All rights reserved.
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2016, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2019, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  Copyright (c) 2001 Mark Fullmer and The Ohio State University
  *  All rights reserved.
@@ -58,12 +55,12 @@
 #include <stdint.h>
 #endif
 
+#include "util.h"
+#include "output_raw.h"
 #include "ftlib.h"
-#include "nf_common.h"
 #include "nffile.h"
 #include "nfx.h"
 #include "launch.h"
-#include "util.h"
 
 /* Global defines */
 #define MAXRECORDS 30
@@ -156,7 +153,7 @@ int	i;
 		extension_info->map->ex_id[i++] = EX_MULIPLE;
 	}
 
-   	if (!ftio_check_xfield(ftio, FT_XFIELD_NEXTHOP )) {
+   	if (!ftio_check_xfield(ftio, FT_XFIELD_PEER_NEXTHOP )) {
 		extension_info->map->ex_id[i++] = EX_NEXT_HOP_v4;
 	}
 
@@ -268,11 +265,11 @@ uint32_t			cnt;
 					record.dir			= 0;
 					record.dst_tos  	= 0;
 					break;
-				case EX_ROUTER_IP_v4:
+				case EX_NEXT_HOP_v4:
 					record.ip_nexthop.V4 = *((uint32_t*)(rec+fo.peer_nexthop));
 					break;
-				case EX_NEXT_HOP_v4:
-					record.ip_router.V4 = *((uint32_t*)(rec+fo.router_sc));
+				case EX_ROUTER_IP_v4:
+					record.ip_router.V4 = *((uint32_t*)(rec+fo.exaddr));
 					break;
 				case EX_ROUTER_ID:
 					record.engine_type = *((uint8_t*)(rec+fo.engine_type));
@@ -287,7 +284,7 @@ uint32_t			cnt;
 
 		if ( extended ) {
 			char *string;
-			format_file_block_record(&record, &string, 0);
+			flow_record_to_raw(&record, &string, 0);
 			fprintf(stderr, "%s\n", string);
 		} 
 

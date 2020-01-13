@@ -2,26 +2,19 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_REVISION($Revision: 243 $)dnl 
-AC_INIT(nfdump, 1.6.17, peter@people.ops-trust.net)
-# $Date: 2014-11-16 14:10:20 +0100 (Sun, 16 Nov 2014) $
-#AC_CONFIG_SRCDIR([grammar.y])
+AC_REVISION($Revision: 244 $)dnl 
+AC_INIT(nfdump, 1.6.18, peter@people.ops-trust.net)
+
 AC_CONFIG_HEADER([config.h])
 AM_INIT_AUTOMAKE([subdir-objects])
 
-LT_INIT
-# AC_ENABLE_SHARED
-# AC_ENABLE_STATIC
- 
 # Checks for programs.
-AC_PROG_CC
-AM_PROG_CC_C_O
+CFLAGS="-g -O3"
+AC_PROG_CC([clang gcc])
+AX_CHECK_C11
+CFLAGS="$CFLAGS -Wall -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wmissing-noreturn -fno-strict-aliasing"
 
-dnl get the flags
-CFLAGS="${CFLAGS=}"
-if test $ac_cv_prog_gcc = yes -a "x$CFLAGS" = "x-g -O2"; then
-	CFLAGS="-g -O2 -Wall -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wmissing-noreturn -fno-strict-aliasing"
-fi
+LT_INIT
 
 AC_ARG_ENABLE(devel,
 [  --enable-devel       compile debug and development code into nfdump; default is NO])
@@ -29,20 +22,6 @@ AC_ARG_ENABLE(devel,
 # Which way is better?
 if test "${enable_devel}" = "yes" ; then
 	CFLAGS="$CFLAGS -DDEVEL"
-cat >>config.h <<_ACEOF
-#define dbg_printf(...) printf(__VA_ARGS__)
-_ACEOF
-else
-cat >>config.h <<_ACEOF
-#define dbg_printf(...) /* printf(__VA_ARGS__) */
-_ACEOF
-fi
-
-AC_ARG_ENABLE(compat15,
-[  --enable-compat15       compile nfdump, to read nfdump data files created with nfdump 1.5.x; default is NO])
-
-if test "${enable_compat15}" = "yes" ; then
-	CFLAGS="$CFLAGS -DCOMPAT15"
 fi
 
 AC_ARG_ENABLE(nsel,
@@ -50,6 +29,17 @@ AC_ARG_ENABLE(nsel,
 
 if test "${enable_nsel}" = "yes" ; then
 	CFLAGS="$CFLAGS -DNSEL"
+fi
+
+AC_ARG_ENABLE(jnat,
+[  --enable-jnat           compile nfdump, to read and process Junos NAT event logging; default is NO])
+
+if test "${enable_jnat}" = "yes" ; then
+	CFLAGS="$CFLAGS -DNSEL -DJUNOS"
+fi
+
+if test "${enable_nsel}" = "yes" -a "${enable_jnat}" = "yes"; then
+	AC_MSG_ERROR(You can use only one of --enable-nsel or --enable-jnat. CISCO and Juniper are not compatible.)
 fi
 
 AC_ARG_ENABLE(nel,
@@ -104,7 +94,7 @@ fi
 )
 
 AC_ARG_WITH(pcappath,
-[  --with-pcappath=PATH      Expect RRD installed in PATH; default /usr/local],
+[  --with-pcappath=PATH      Expect libpcap installed in PATH; default /usr/local],
 if test "x$with_pcappath" = "xyes" ; then
 	CPPFLAGS="${CPPFLAGS} -I/usr/local/include"
 	LDFLAGS="${LDFLAGS} -L/usr/local/lib"
@@ -125,7 +115,7 @@ if test -d "$WHERE_FTPATH"; then
 	if test ! -f "$WHERE_FTPATH/include/ftlib.h"; then
 		AC_MSG_ERROR(ftlib.h file not found in flow-tools directory '$WHERE_FTPATH'. Use --with-ftpath=PATH)
 	fi
-	if test ! -f "$WHERE_FTPATH/lib/libft.a" -a -f "$WHERE_FTPATH/lib64/libft.a" ! -f "$WHERE_FTPATH/lib/libft.so" -a -f "$WHERE_FTPATH/lib64/libft.so"; then
+	if test ! -f "$WHERE_FTPATH/lib/libft.a" -o -f "$WHERE_FTPATH/lib64/libft.a" -o -f "$WHERE_FTPATH/lib/libft.so" -o -f "$WHERE_FTPATH/lib64/libft.so"; then
 		AC_MSG_ERROR(libft.a not found in flow-tools directory '$WHERE_FTPATH'. Build flow tools first)
 	fi
 	FT_INCLUDES="-I$WHERE_FTPATH/include -I$WHERE_FTPATH/lib"
@@ -242,7 +232,7 @@ AC_ARG_ENABLE(nfpcapd,
 cat >>config.h <<_ACEOF
 #define HAVE_LIBPCAP 1
 _ACEOF
-RRD_LIBS="-lpcap"
+PCAP_LIBS="-lpcap"
 AC_SUBST(PCAP_LIBS)
 ]
 , AC_MSG_ERROR(Can not link libpcap. Please specify --with-pcappath=.. configure failed! ))
@@ -320,6 +310,7 @@ AC_LINK_IFELSE(
 # Checks for header files.
 AC_HEADER_DIRENT
 AC_HEADER_STDC
+AC_CHECK_HEADERS(stdio_ext.h)
 AC_CHECK_HEADERS([nameser8_compat.h])
 AC_CHECK_HEADERS([features.h arpa/inet.h fcntl.h netinet/in.h fts.h stdint.h stdlib.h stddef.h string.h sys/socket.h syslog.h unistd.h iso/limits_iso.h])
 AC_CHECK_HEADERS(pcap-bpf.h net/bpf.h)
@@ -402,6 +393,7 @@ AC_CHECK_SIZEOF(long long)
 AC_CHECK_SIZEOF(__int64)
 AC_CHECK_SIZEOF(void *)
 AC_CHECK_SIZEOF(size_t)
+AC_CHECK_SIZEOF(time_t)
 AC_CHECK_SIZEOF(ptrdiff_t)
 AC_C_CONST
 AC_CHECK_FUNCS(memcmp memcpy memmove memset)

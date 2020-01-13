@@ -1,8 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2016, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2013, Peter Haag
+ *  Copyright (c) 2013-2019, Peter Haag
  *  All rights reserved.
  *  
  *  Redistribution and use in source and binary forms, with or without 
@@ -52,19 +49,13 @@
 #include "nffile.h"
 #include "nfx.h"
 #include "nfnet.h"
-#include "nf_common.h"
+#include "output_raw.h"
 #include "bookkeeper.h"
 #include "collector.h"
 #include "exporter.h"
 
 #include "flowtree.h"
 #include "netflow_pcap.h"
-
-#ifndef DEVEL
-#   define dbg_printf(...) /* printf(__VA_ARGS__) */
-#else
-#   define dbg_printf(...) printf(__VA_ARGS__)
-#endif
 
 extern int verbose;
 extern extension_descriptor_t extension_descriptor[];
@@ -315,7 +306,7 @@ void		*data_ptr;
 	if ( verbose ) {
 		master_record_t master_record;
 		ExpandRecord_v2((common_record_t *)common_record, &pcap_extension_info, NULL, &master_record);
-	 	format_file_block_record(&master_record, &string, 0);
+	 	flow_record_to_raw(&master_record, &string, 0);
 		printf("%s\n", string);
 	}
 
@@ -334,6 +325,9 @@ struct FlowNode *Client_node;
 uint64_t	latency;
 
 	Client_node = node->rev_node;
+	if ( !Client_node ) 
+		return;
+
 	latency = ((uint64_t)node->t_first.tv_sec * (uint64_t)1000000 + (uint64_t)node->t_first.tv_usec) -
 			  ((uint64_t)Client_node->t_first.tv_sec * (uint64_t)1000000 + (uint64_t)Client_node->t_first.tv_usec);
 	
@@ -351,6 +345,9 @@ struct FlowNode *Server_node;
 uint64_t	latency;
 
 	Server_node = node->rev_node;
+	if ( !Server_node ) 
+		return;
+
 	latency = ((uint64_t)t_packet->tv_sec * (uint64_t)1000000 + (uint64_t)t_packet->tv_usec) -
 			  ((uint64_t)Server_node->t_first.tv_sec * (uint64_t)1000000 + (uint64_t)Server_node->t_first.tv_usec);
 	
@@ -371,6 +368,9 @@ struct FlowNode *Client_node;
 uint64_t	latency;
 
 	Client_node = node->rev_node;
+	if ( !Client_node ) 
+		return;
+
 	latency = ((uint64_t)t_packet->tv_sec * (uint64_t)1000000 + (uint64_t)t_packet->tv_usec) -
 			  ((uint64_t)node->latency.t_request.tv_sec * (uint64_t)1000000 + (uint64_t)node->latency.t_request.tv_usec);
 	

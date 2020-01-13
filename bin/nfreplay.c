@@ -1,7 +1,5 @@
 /*
- *  Copyright (c) 2018, 2017, 2016 Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2019, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -54,6 +52,10 @@
 #include <stdint.h>
 #endif
 
+#ifdef HAVE_STDIO_EXT_H
+#include <stdio_ext.h>
+#endif
+
 #include "nffile.h"
 #include "nfx.h"
 #include "nf_common.h"
@@ -85,10 +87,6 @@
 /* Externals */
 extern int yydebug;
 
-#ifdef COMPAT15
-extern extension_descriptor_t extension_descriptor[];
-#endif
-
 /* Global Variables */
 FilterEngine_data_t	*Engine;
 int 		verbose;
@@ -99,8 +97,6 @@ static const char *nfdump_version = VERSION;
 send_peer_t peer;
 
 extension_map_list_t *extension_map_list;
-
-generic_exporter_t **exporter_list;
 
 /* Function Prototypes */
 static void usage(char *name);
@@ -214,13 +210,9 @@ uint32_t		numflows, cnt;
 
 	// z-parameter variables
 	struct timeval todayTime, currentTime;
-	double first, last, now, today = 0, reftime = 0;
+	double today = 0, reftime = 0;
 	int reducer = 0;
 
-#ifdef COMPAT15
-int	v1_map_done = 0;
-#endif
-	
 	// Get the first file handle
 	nffile = GetNextFile(NULL, twin_start, twin_end);
 	if ( !nffile ) {
@@ -283,45 +275,6 @@ int	v1_map_done = 0;
 				} break; // not really needed
 		}
 
-#ifdef COMPAT15
-		if ( nffile->block_header->id == DATA_BLOCK_TYPE_1 ) {
-			common_record_v1_t *v1_record = (common_record_v1_t *)nffile->buff_ptr;
-			// create an extension map for v1 blocks
-			if ( v1_map_done == 0 ) {
-				extension_map_t *map = malloc(sizeof(extension_map_t) + 2 * sizeof(uint16_t) );
-				if ( ! map ) {
-					perror("Memory allocation error");
-					exit(255);
-				}
-				map->type 	= ExtensionMapType;
-				map->size 	= sizeof(extension_map_t) + 2 * sizeof(uint16_t);
-				if (( map->size & 0x3 ) != 0 ) {
-					map->size += 4 - ( map->size & 0x3 );
-				}
-				map->map_id = INIT_ID;
-				map->ex_id[0]  = EX_IO_SNMP_2;
-				map->ex_id[1]  = EX_AS_2;
-				map->ex_id[2]  = 0;
-				
-				map->extension_size  = 0;
-				map->extension_size += extension_descriptor[EX_IO_SNMP_2].size;
-				map->extension_size += extension_descriptor[EX_AS_2].size;
-					
-				Insert_Extension_Map(extension_map_list, map);
-				v1_map_done = 1;
-			}
-
-			// convert the records to v2
-			for ( i=0; i < nffile->block_header->NumRecords; i++ ) {
-				common_record_t *v2_record = (common_record_t *)v1_record;
-				Convert_v1_to_v2((void *)v1_record);
-				// now we have a v2 record -> use size of v2_record->size
-				v1_record = (common_record_v1_t *)((pointer_addr_t)v1_record + v2_record->size);
-			}
-			nffile->block_header->id = DATA_BLOCK_TYPE_2;
-		}
-#endif
-
 		if ( nffile->block_header->id != DATA_BLOCK_TYPE_2 ) {
 			LogError("Can't process block type %u. Skip block.\n", nffile->block_header->id);
 			continue;
@@ -330,9 +283,14 @@ int	v1_map_done = 0;
 		// cnt is the number of blocks, which survived the filter
 		// and added to the output buffer
 		flow_record = nffile->buff_ptr;
-
+		uint32_t sumSize = 0;
 		for ( i=0; i < nffile->block_header->NumRecords; i++ ) {
 			int match;
+			if ( (sumSize + flow_record->size) > ret ) {
+				LogError("Corrupt data file. Inconsistent block size in %s line %d\n", __FILE__, __LINE__);
+				exit(255);
+			}
+			sumSize += flow_record->size;
 
 			switch ( flow_record->type ) {
 				case CommonRecordType: {
@@ -368,9 +326,9 @@ int	v1_map_done = 0;
 					numflows++;
 
 					if ( peer.flush ) {
-						ret = FlushBuffer(confirm);
+						int err = FlushBuffer(confirm);
 	
-						if ( ret < 0 ) {
+						if ( err < 0 ) {
 							perror("Error sending data");
 							CloseFile(nffile);
 							DisposeFile(nffile);
@@ -395,12 +353,18 @@ int	v1_map_done = 0;
 					} break;
 				case ExtensionMapType: {
 					extension_map_t *map = (extension_map_t *)flow_record;
-	
-					if ( Insert_Extension_Map(extension_map_list, map) ) {
-						// flush new map
-						
-					} // else map already known and flushed
-	
+
+					int ret = Insert_Extension_Map(extension_map_list, map);
+					switch (ret) {
+						case 0:
+							break; // map already known and flushed
+						case 1:
+							break; // new map
+						default:
+							LogError("Corrupt data file. Unable to decode at %s line %d\n", __FILE__, __LINE__);
+							exit(255);
+					}
+
 					} break;
 				case ExporterRecordType:
 				case SamplerRecordype:
@@ -416,11 +380,11 @@ int	v1_map_done = 0;
 
 			// z-parameter
 			//first and last are line (tstart and tend) timestamp with milliseconds
-			first = (double) flow_record->first + ((double)flow_record->msec_first / 1000);
-			last = (double) flow_record->last + ((double)flow_record->msec_last / 1000);
+			// first = (double) flow_record->first + ((double)flow_record->msec_first / 1000);
+			double last = (double) flow_record->last + ((double)flow_record->msec_last / 1000);
 
 			gettimeofday(&currentTime, NULL);
-			now =  (double)currentTime.tv_sec + (double)currentTime.tv_usec / 1000000;
+			double now =  (double)currentTime.tv_sec + (double)currentTime.tv_usec / 1000000;
 
 			// remove incoherent values
 			if (reftime == 0 && last > 1000000000 && last < 2000000000){

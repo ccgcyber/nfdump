@@ -1,6 +1,5 @@
 /*
- *  Copyright (c) 2018, 2017 Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2019, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -58,7 +57,10 @@
 #include "bookkeeper.h"
 #include "collector.h"
 #include "exporter.h"
-#include "nf_common.h"
+// #include "nf_common.h"
+#include "output_raw.h"
+#include "output_pipe.h"
+#include "output_csv.h"
 #include "output_json.h"
 #include "netflow_v5_v7.h"
 #include "netflow_v9.h"
@@ -90,15 +92,11 @@ FilterEngine_data_t	*Engine;
 extern char	*FilterFilename;
 extern uint32_t loopcnt;
 
-#ifdef COMPAT15
-extern extension_descriptor_t extension_descriptor[];
-#endif
-
 /* Local Variables */
 const char *nfdump_version = VERSION;
 
 static uint64_t total_bytes;
-static uint32_t total_flows;
+static uint32_t recordCount;
 static uint32_t skipped_blocks;
 static uint32_t	is_anonymized;
 static time_t 	t_first_flow, t_last_flow;
@@ -111,7 +109,7 @@ int hash_skip = 0;
 
 extension_map_list_t *extension_map_list;
 
-extern generic_exporter_t **exporter_list;
+extern exporter_t **exporter_list;
 /*
  * Output Formats:
  * User defined output formats can be compiled into nfdump, for easy access
@@ -215,28 +213,30 @@ extern generic_exporter_t **exporter_list;
  * 5. Recompile nfdump
  */
 
+static void flow_record_to_null(void *record, char ** s, int tag);
+
 // Assign print functions for all output options -o
 // Teminated with a NULL record
 printmap_t printmap[] = {
-	{ "raw",		format_file_block_record,  	NULL 			},
-	{ "line", 		format_special,      		FORMAT_line 	},
-	{ "long", 		format_special, 			FORMAT_long 	},
-	{ "extended",	format_special, 			FORMAT_extended	},
-	{ "biline", 	format_special,      		FORMAT_biline 	},
-	{ "bilong", 	format_special,      		FORMAT_bilong 	},
-	{ "pipe", 		flow_record_to_pipe,      	NULL 			},
-	{ "json", 		flow_record_to_json,      	NULL 			},
-	{ "csv", 		flow_record_to_csv,      	NULL 			},
-	{ "null", 		flow_record_to_null,      	NULL 			},
+	{ "raw",		flow_record_to_raw,  		raw_prolog, raw_epilog, NULL },
+	{ "line", 		format_special,      		text_prolog, text_epilog, FORMAT_line },
+	{ "long", 		format_special, 			text_prolog, text_epilog, FORMAT_long },
+	{ "extended",	format_special, 			text_prolog, text_epilog, FORMAT_extended },
+	{ "biline", 	format_special,      		text_prolog, text_epilog, FORMAT_biline	},
+	{ "bilong", 	format_special,      		text_prolog, text_epilog, FORMAT_bilong	},
+	{ "pipe", 		flow_record_to_pipe,      	pipe_prolog, pipe_epilog, NULL },
+	{ "json", 		flow_record_to_json,      	json_prolog, json_epilog, NULL },
+	{ "csv", 		flow_record_to_csv,      	csv_prolog,  csv_epilog,  NULL },
+	{ "null", 		flow_record_to_null,      	text_prolog, text_epilog, NULL },
 #ifdef NSEL
-	{ "nsel",		format_special, 			FORMAT_nsel		},
-	{ "nel",		format_special, 			FORMAT_nel		},
+	{ "nsel",		format_special, 			text_prolog, text_epilog, FORMAT_nsel },
+	{ "nel",		format_special, 			text_prolog, text_epilog, FORMAT_nel },
 #endif
 
 // add your formats here
 
 // This is always the last line
-	{ NULL,			NULL,                       NULL			}
+	{ NULL, NULL, NULL, NULL, "" }
 };
 
 // For automatic output format generation in case of custom aggregation
@@ -252,8 +252,8 @@ static void usage(char *name);
 static void PrintSummary(stat_record_t *stat_record, int plain_numbers, int csv_output);
 
 static stat_record_t process_data(char *wfile, int element_stat, int flow_stat, int sort_flows,
-	printer_t print_header, printer_t print_record, time_t twin_start, time_t twin_end, 
-	uint64_t limitflows, int tag, int compress);
+	printer_t print_record, time_t twin_start, time_t twin_end, 
+	uint64_t limitRecords, int tag, int compress);
 
 /* Functions */
 
@@ -305,8 +305,9 @@ static void usage(char *name) {
 					"\t\t csv      ',' separated, machine parseable output format.\n"
 					"\t\t json     json output format.\n"
 					"\t\t pipe     '|' separated legacy machine parseable output format.\n"
+					"\t\t null     no flow records, but statistics output.\n"
 					"\t\t\tmode may be extended by '6' for full IPv6 listing. e.g.long6, extended6.\n"
-					"-E <file>\tPrint exporter ans sampling info for collected flows.\n"
+					"-E <file>\tPrint exporter and sampling info for collected flows.\n"
 					"-v <file>\tverify netflow data file. Print version and blocks.\n"
 					"-x <file>\tverify extension records in netflow data file.\n"
 					"-X\t\tDump Filtertable and exit (debug option).\n"
@@ -315,6 +316,9 @@ static void usage(char *name) {
 					"\t\tyyyy/MM/dd.hh:mm:ss[-yyyy/MM/dd.hh:mm:ss]\n", name);
 } /* usage */
 
+static void flow_record_to_null(void *record, char ** s, int tag) {
+	// empty - do not list any flows
+} // End of flow_record_to_null
 
 static void PrintSummary(stat_record_t *stat_record, int plain_numbers, int csv_output) {
 static double	duration;
@@ -360,18 +364,14 @@ char 		bps_str[NUMBER_STRING_SIZE], pps_str[NUMBER_STRING_SIZE], bpp_str[NUMBER_
 } // End of PrintSummary
 
 stat_record_t process_data(char *wfile, int element_stat, int flow_stat, int sort_flows,
-	printer_t print_header, printer_t print_record, time_t twin_start, time_t twin_end, 
-	uint64_t limitflows, int tag, int compress) {
+	printer_t print_record, time_t twin_start, time_t twin_end, 
+	uint64_t limitRecords, int tag, int compress) {
 common_record_t 	*flow_record, *record_ptr;
 master_record_t		*master_record;
 nffile_t			*nffile_w, *nffile_r;
 stat_record_t 		stat_record;
 int 				done, write_file;
 
-#ifdef COMPAT15
-int	v1_map_done = 0;
-#endif
-	
 	// time window of all matched flows
 	memset((void *)&stat_record, 0, sizeof(stat_record_t));
 	stat_record.first_seen = 0x7fffffff;
@@ -431,8 +431,6 @@ int	v1_map_done = 0;
 	done = 0;
 	while ( !done ) {
 	int i, ret;
-	char *ConvertBuffer = NULL;
-
 		// get next data block from file
 		ret = ReadBlock(nffile_r);
 
@@ -467,52 +465,6 @@ int	v1_map_done = 0;
 				total_bytes += ret;
 		}
 
-
-#ifdef COMPAT15
-		if ( nffile_r->block_header->id == DATA_BLOCK_TYPE_1 ) {
-			common_record_v1_t *v1_record = (common_record_v1_t *)nffile_r->buff_ptr;
-			// create an extension map for v1 blocks
-			if ( v1_map_done == 0 ) {
-				extension_map_t *map = malloc(sizeof(extension_map_t) + 2 * sizeof(uint16_t) );
-				if ( ! map ) {
-					LogError("malloc() allocation error in %s line %d: %s\n", __FILE__, __LINE__, strerror(errno) );
-					exit(255);
-				}
-				map->type 	= ExtensionMapType;
-				map->size 	= sizeof(extension_map_t) + 2 * sizeof(uint16_t);
-				if (( map->size & 0x3 ) != 0 ) {
-					map->size += 4 - ( map->size & 0x3 );
-				}
-
-				map->map_id = INIT_ID;
-
-				map->ex_id[0]  = EX_IO_SNMP_2;
-				map->ex_id[1]  = EX_AS_2;
-				map->ex_id[2]  = 0;
-				
-				map->extension_size  = 0;
-				map->extension_size += extension_descriptor[EX_IO_SNMP_2].size;
-				map->extension_size += extension_descriptor[EX_AS_2].size;
-
-				if ( Insert_Extension_Map(extension_map_list,map) && write_file ) {
-					// flush new map
-					AppendToBuffer(nffile_w, (void *)map, map->size);
-				} // else map already known and flushed
-
-				v1_map_done = 1;
-			}
-
-			// convert the records to v2
-			for ( i=0; i < nffile_r->block_header->NumRecords; i++ ) {
-				common_record_t *v2_record = (common_record_t *)v1_record;
-				Convert_v1_to_v2((void *)v1_record);
-				// now we have a v2 record -> use size of v2_record->size
-				v1_record = (common_record_v1_t *)((pointer_addr_t)v1_record + v2_record->size);
-			}
-			nffile_r->block_header->id = DATA_BLOCK_TYPE_2;
-		}
-#endif
-
 		if ( nffile_r->block_header->id == Large_BLOCK_Type ) {
 			// skip
 			printf("Xstat block skipped ...\n");
@@ -521,7 +473,7 @@ int	v1_map_done = 0;
 
 		if ( nffile_r->block_header->id != DATA_BLOCK_TYPE_2 ) {
 			if ( nffile_r->block_header->id == DATA_BLOCK_TYPE_1 ) {
-				LogError("Can't process nfdump 1.5.x block type 1. Add --enable-compat15 to compile compatibility code. Skip block.\n");
+				LogError("nfdump 1.5.x block type 1 no longer supported. Skip block.\n");
 			} else {
 				LogError("Can't process block type %u. Skip block.\n", nffile_r->block_header->id);
 			}
@@ -529,30 +481,23 @@ int	v1_map_done = 0;
 			continue;
 		}
 
+		uint32_t sumSize = 0;
 		record_ptr = nffile_r->buff_ptr;
 		for ( i=0; i < nffile_r->block_header->NumRecords; i++ ) {
 			flow_record = record_ptr;
+			if ( (sumSize + record_ptr->size) > ret || (record_ptr->size < sizeof(record_header_t)) ) {
+				LogError("Corrupt data file. Inconsistent block size in %s line %d\n", __FILE__, __LINE__);
+				exit(255);
+			}
+			sumSize += record_ptr->size;
 			switch ( record_ptr->type ) {
 				case CommonRecordV0Type: 
-					// convert common record v0
-					if ( !ConvertBuffer ) {
-						ConvertBuffer = malloc(65536);
-						if ( !ConvertBuffer ) {
-							LogError("malloc() error in %s line %d: %s\n", __FILE__, __LINE__, strerror(errno) );
-							exit(255);
-						}
-					}
-					if ( !ConvertCommonV0((void *)record_ptr, (common_record_t *)ConvertBuffer) ) {
-						LogError("Corrupt data file. Unable to decode at %s line %d\n", __FILE__, __LINE__);
-						exit(255);
-
-					}
-					flow_record = (common_record_t *)ConvertBuffer;
-					dbg_printf("Converted type %u to %u record\n", CommonRecordV0Type, CommonRecordType);
+					LogError("Old common v0 records no longer supported - skipped");
+					break;
 				case CommonRecordType: {
 					int match;
 					uint32_t map_id;
-					generic_exporter_t *exp_info;
+					exporter_t *exp_info;
 
 					// valid flow_record converted if needed
 					map_id = flow_record->ext_map;
@@ -568,7 +513,7 @@ int	v1_map_done = 0;
 						continue;
 					} 
 
-					total_flows++;
+					recordCount++;
 					master_record = &(extension_map_list->slot[map_id]->master_record);
 					Engine->nfrecord = (uint64_t *)master_record;
 					ExpandRecord_v2( flow_record, extension_map_list->slot[map_id], 
@@ -577,7 +522,7 @@ int	v1_map_done = 0;
 					// Time based filter
 					// if no time filter is given, the result is always true
 					match  = twin_start && (master_record->first < twin_start || master_record->last > twin_end) ? 0 : 1;
-					match &= limitflows ? stat_record.numflows < limitflows : 1;
+					match &= limitRecords ? recordCount <= limitRecords : 1;
 
 					// filter netflow record with user supplied filter
 					if ( match ) 
@@ -619,11 +564,7 @@ int	v1_map_done = 0;
 							// if we need to print out this record
 							print_record(master_record, &string, tag);
 							if ( string ) {
-								if ( limitflows ) {
-									if ( (stat_record.numflows <= limitflows) )
-										printf("%s\n", string);
-								} else 
-									printf("%s\n", string);
+								printf("%s\n", string);
 							}
 						} else { 
 							// mutually exclusive conditions should prevent executing this code
@@ -635,10 +576,18 @@ int	v1_map_done = 0;
 				case ExtensionMapType: {
 					extension_map_t *map = (extension_map_t *)record_ptr;
 	
-					if ( Insert_Extension_Map(extension_map_list, map) && write_file ) {
-						// flush new map
-						AppendToBuffer(nffile_w, (void *)map, map->size);
-					} // else map already known and flushed
+					int ret = Insert_Extension_Map(extension_map_list, map);
+					switch (ret) {
+						case 0:
+							break; // map already known and flushed
+						case 1:
+							if ( write_file ) 
+								AppendToBuffer(nffile_w, (void *)map, map->size);
+							break;
+						default:
+							LogError("Corrupt data file. Unable to decode at %s line %d\n", __FILE__, __LINE__);
+							exit(255);
+					}
 					} break;
 				case ExporterRecordType:
 				case SamplerRecordype:
@@ -677,8 +626,8 @@ int	v1_map_done = 0;
 		} // for all records
 
 		// check if we are done, due to -c option 
-		if ( limitflows ) 
-			done = stat_record.numflows >= limitflows;
+		if ( limitRecords ) 
+			done = recordCount >= limitRecords;
 
 	} // while
 
@@ -713,17 +662,19 @@ int	v1_map_done = 0;
 int main( int argc, char **argv ) {
 struct stat stat_buff;
 stat_record_t	sum_stat;
-printer_t 	print_header, print_record;
+printer_t 	print_record;
+func_prolog_t print_prolog;
+func_epilog_t print_epilog;
 nfprof_t 	profile_data;
 char 		*rfile, *Rfile, *Mdirs, *wfile, *ffile, *filter, *tstring, *stat_type;
-char		*byte_limit_string, *packet_limit_string, *print_format, *record_header;
+char		*byte_limit_string, *packet_limit_string, *print_format;
 char		*print_order, *query_file, *nameserver, *aggr_fmt;
 int 		c, ffd, ret, element_stat, fdump;
-int 		i, user_format, quiet, flow_stat, topN, aggregate, aggregate_mask, bidir;
+int 		i, quiet, flow_stat, topN, aggregate, aggregate_mask, bidir;
 int 		print_stat, syntax_only, date_sorted, do_tag, compress;
-int			plain_numbers, GuessDir, pipe_output, csv_output, ModifyCompress;
+int			plain_numbers, GuessDir, pipe_output, csv_output, json_output, ModifyCompress;
 time_t 		t_start, t_end;
-uint32_t	limitflows;
+uint32_t	limitRecords;
 char 		Ident[IDENTLEN];
 
 	rfile = Rfile = Mdirs = wfile = ffile = filter = tstring = stat_type = NULL;
@@ -737,30 +688,30 @@ char 		Ident[IDENTLEN];
 	flow_stat       = 0;
 	print_stat      = 0;
 	element_stat  	= 0;
-	limitflows		= 0;
+	limitRecords		= 0;
 	date_sorted		= 0;
 	total_bytes		= 0;
-	total_flows		= 0;
+	recordCount		= 0;
 	skipped_blocks	= 0;
 	do_tag			= 0;
 	quiet			= 0;
-	user_format		= 0;
 	compress		= NOT_COMPRESSED;
 	plain_numbers   = 0;
 	pipe_output		= 0;
 	csv_output		= 0;
+	json_output		= 0;
 	is_anonymized	= 0;
 	GuessDir		= 0;
 	nameserver		= NULL;
 
 	print_format    = NULL;
-	print_header 	= NULL;
 	print_record  	= NULL;
+	print_prolog	= NULL;
+	print_epilog	= NULL;
 	print_order  	= NULL;
 	query_file		= NULL;
 	ModifyCompress	= -1;
 	aggr_fmt		= NULL;
-	record_header 	= NULL;
 
 	Ident[0] = '\0';
 
@@ -834,8 +785,8 @@ char 		Ident[IDENTLEN];
 				compress = LZO_COMPRESSED;
 				break;
 			case 'c':	
-				limitflows = atoi(optarg);
-				if ( !limitflows ) {
+				limitRecords = atoi(optarg);
+				if ( !limitRecords ) {
 					LogError("Option -c needs a number > 0\n");
 					exit(255);
 				}
@@ -922,8 +873,8 @@ char 		Ident[IDENTLEN];
 				do_tag = 1;
 				break;
 			case 'i':
-				strncpy(Ident, optarg, IDENT_SIZE);
-				Ident[IDENT_SIZE - 1] = 0;
+				strncpy(Ident, optarg, IDENTLEN);
+				Ident[IDENTLEN - 1] = 0;
 				if ( strchr(Ident, ' ') ) {
 					LogError("Ident must not contain spaces\n");
 					exit(255);
@@ -1065,8 +1016,7 @@ char 		Ident[IDENTLEN];
 			if ( !ParseOutputFormat(format, plain_numbers, printmap) )
 				exit(255);
 			print_record  = format_special;
-			record_header = get_record_header();
-			user_format	  = 1;
+			print_prolog  = text_prolog;
 		} else {
 			LogError("Missing format description for user defined output format!\n");
 			exit(255);
@@ -1091,9 +1041,9 @@ char 		Ident[IDENTLEN];
 					if ( !ParseOutputFormat(printmap[i].Format, plain_numbers, printmap) )
 						exit(255);
 					// predefined custom format
-					print_record  = printmap[i].func;
-					record_header = get_record_header();
-					user_format	  = 1;
+					print_record  = printmap[i].func_record;
+					print_prolog  = printmap[i].func_prolog;
+					print_epilog  = printmap[i].func_epilog;
 				} else {
 					// To support the pipe output format for element stats - check for pipe, and remember this
 					if ( strncasecmp(print_format, "pipe", MAXMODELEN) == 0 ) {
@@ -1101,12 +1051,14 @@ char 		Ident[IDENTLEN];
 					}
 					if ( strncasecmp(print_format, "csv", MAXMODELEN) == 0 ) {
 						csv_output = 1;
-						set_record_header();
-						record_header = get_record_header();
+					}
+					if ( strncasecmp(print_format, "json", MAXMODELEN) == 0 ) {
+						json_output = 1;
 					}
 					// predefined static format
-					print_record  = printmap[i].func;
-					user_format	  = 0;
+					print_record  = printmap[i].func_record;
+					print_prolog  = printmap[i].func_prolog;
+					print_epilog  = printmap[i].func_epilog;
 				}
 				break;
 			}
@@ -1119,10 +1071,6 @@ char 		Ident[IDENTLEN];
 		exit(255);
 	}
 
-	// this is the only case, where headers are printed.
-	if ( strncasecmp(print_format, "raw", 16) == 0 )
-		print_header = format_file_block_header;
-	
 	if ( aggregate && (flow_stat || element_stat) ) {
 		aggregate = 0;
 		LogError("Command line switch -s overwrites -a\n");
@@ -1192,24 +1140,16 @@ char 		Ident[IDENTLEN];
 	}
 
 
-	if ( !(flow_stat || element_stat || wfile || quiet ) && record_header ) {
-		if ( user_format ) {
-			printf("%s\n", record_header);
-		} else {
-			// static format - no static format with header any more, but keep code anyway
-			if ( Getv6Mode() ) {
-				printf("%s\n", record_header);
-			} else
-				printf("%s\n", record_header);
-		}
+	if ( !(flow_stat || element_stat || wfile || quiet ) && print_prolog ) {
+		print_prolog();
 	}
 
 	nfprof_start(&profile_data);
 	sum_stat = process_data(wfile, element_stat, aggregate || flow_stat, print_order != NULL,
-						print_header, print_record, t_start, t_end, 
-						limitflows, do_tag, compress);
-	nfprof_end(&profile_data, total_flows);
-
+						print_record, t_start, t_end, 
+						limitRecords, do_tag, compress);
+	nfprof_end(&profile_data, recordCount);
+	
 	if ( total_bytes == 0 ) {
 		printf("No matched flows\n");
 		exit(0);
@@ -1220,7 +1160,7 @@ char 		Ident[IDENTLEN];
 			nffile_t *nffile = OpenNewFile(wfile, NULL, compress, is_anonymized, NULL);
 			if ( !nffile ) 
 				exit(255);
-			if ( ExportFlowTable(nffile, aggregate, bidir, date_sorted, extension_map_list) ) {
+			if ( ExportFlowTable(nffile, aggregate, bidir, GuessDir, date_sorted, extension_map_list) ) {
 				CloseUpdateFile(nffile, Ident );	
 			} else {
 				CloseFile(nffile);
@@ -1233,17 +1173,20 @@ char 		Ident[IDENTLEN];
 	}
 
 	if (flow_stat) {
-		PrintFlowStat(record_header, print_record, topN, do_tag, quiet, csv_output, extension_map_list);
+		PrintFlowStat(print_prolog, print_record, topN, do_tag, quiet, csv_output, extension_map_list);
 #ifdef DEVEL
 		printf("Loopcnt: %u\n", loopcnt);
 #endif
 	} 
 
 	if (element_stat) {
-		PrintElementStat(&sum_stat, plain_numbers, record_header, print_record, topN, do_tag, quiet, pipe_output, csv_output);
+		PrintElementStat(&sum_stat, plain_numbers, print_record, topN, do_tag, quiet, pipe_output, csv_output);
 	} 
 
-	if ( !quiet ) {
+	if ( print_epilog ) {
+		print_epilog();
+	}
+	if ( !quiet && !json_output ) {
 		if ( csv_output ) {
 			PrintSummary(&sum_stat, plain_numbers, csv_output);
 		} else if ( !wfile ) {
@@ -1257,7 +1200,7 @@ char 		Ident[IDENTLEN];
  				printf("Time window: %s\n", TimeString(t_first_flow, t_last_flow));
 			}
 			printf("Total flows processed: %u, Blocks skipped: %u, Bytes read: %llu\n", 
-				total_flows, skipped_blocks, (unsigned long long)total_bytes);
+				recordCount, skipped_blocks, (unsigned long long)total_bytes);
 			nfprof_print(&profile_data, stdout);
 		}
 	}

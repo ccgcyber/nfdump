@@ -217,9 +217,14 @@ int r;
 
 	in  = (unsigned char __LZO_MMODEL *)(nffile->buff_pool[0] + sizeof(data_block_header_t));	
 	out = (unsigned char __LZO_MMODEL *)(nffile->buff_pool[1] + sizeof(data_block_header_t));	
-	in_len = nffile->block_header->size;
+	in_len  = nffile->block_header->size;
+	out_len = nffile->buff_size;
 
-	r = lzo1x_decompress(in,in_len,out,&out_len,NULL);
+	if ( in_len == 0 ) {
+		LogError("Uncompress_Block_LZO() header length error in %s line %d\n", __FILE__, __LINE__);
+   		return -1;
+	}
+	r = lzo1x_decompress_safe(in,in_len,out,&out_len,NULL);
 	if (r != LZO_E_OK ) {
   		/* this should NEVER happen */
 		LogError("Uncompress_Block_LZO() error decompression failed in %s line %d: LZO error: %d\n", __FILE__, __LINE__, r);
@@ -1072,7 +1077,8 @@ uint32_t compression;
 	read_bytes = ret;
 
 	// Check for sane buffer size
-	if ( nffile->block_header->size > BUFFSIZE ) {
+	if ( nffile->block_header->size > BUFFSIZE ||
+	     nffile->block_header->size == 0 || nffile->block_header->NumRecords == 0) {
 		// this is most likely a corrupt file
 		LogError("Corrupt data file: Requested buffer size %u exceeds max. buffer size.\n", nffile->block_header->size);
 		return NF_CORRUPT;
@@ -1316,7 +1322,7 @@ char 			*filename, outfile[MAXPATHLEN];
 				CloseFile(nffile_w);
 				DisposeFile(nffile_w);
 				unlink(outfile);
-				break;;
+				return;
 			}
 
 			// swap buffers
@@ -1334,7 +1340,7 @@ char 			*filename, outfile[MAXPATHLEN];
 				CloseFile(nffile_w);
 				DisposeFile(nffile_w);
 				unlink(outfile);
-				break;;
+				return;
 			}
 		}
 
@@ -1494,137 +1500,3 @@ int fd, ret;
 	return stat_record;
 
 } // End of GetStatRecord
-
-
-
-#ifdef COMPAT15
-/*
- * v1 -> v2 record conversion:
- * A netflow record in v1 block format has the same size as in v2 block format.
- * Therefore, the conversion rearranges the v1 layout into v2 layout
- *
- * old record size = new record size = 36bytes + x, where x is the sum of
- * IP address block (IPv4 or IPv6) + packet counter + byte counter ( 4/8 bytes) 
- *
- * v1											v2
- * 
- *  0 uint32_t    flags;						uint16_t	type; 	
- *												uint16_t	size;
- *
- *  1 uint16_t    size;							uint8_t		flags;		
- * 												uint8_t 	exporter_sysid;
- *    uint16_t    exporter_ref; => 0			uint16_t	ext_map;
- *
- *  2 uint16_t    msec_first;					uint16_t	msec_first;
- *    uint16_t    msec_last;					uint16_t	msec_last;
- *
- *  3 uint32_t    first;						uint32_t	first;
- *  4 uint32_t    last;							uint32_t	last;
- *
- *  5 uint8_t     dir;							uint8_t		fwd_status;
- *    uint8_t     tcp_flags;					uint8_t		tcp_flags;
- *    uint8_t     prot;							uint8_t		prot;
- *    uint8_t     tos;							uint8_t		tos;
- *
- *  6 uint16_t    input;						uint16_t	srcport;
- *    uint16_t    output;						uint16_t	dstport;
- *
- *  7 uint16_t    srcport;						x bytes IP/pkts/bytes
- *    uint16_t    dstport;
- *
- *  8 uint16_t    srcas;
- *    uint16_t    dstas;
- *												uint16_t    input;
- *												uint16_t    output;
- *
- *												uint16_t    srcas;
- *	9 x bytes IP/pkts/byte						uint16_t    dstas;
- *
- *
- */
-
-void Convert_v1_to_v2(void *mem) {
-common_record_t    *v2 = (common_record_t *)mem;
-common_record_v1_t *v1 = (common_record_v1_t *)mem;
-uint32_t *index 	   = (uint32_t *)mem;
-uint16_t tmp1, tmp2, srcas, dstas, *tmp3;
-size_t cplen;
-
-	// index 0
-	tmp1 	 = v1->flags;
-	v2->type = CommonRecordType;
-	v2->size = v1->size;
-
-	// index 1
-	v2->flags 		   = tmp1;
-	v2->exporter_sysid = 0;
-	v2->ext_map 	   = 0;
-
-	// index 2, 3, 4 already in sync
-
-	// index 5
-	v2->fwd_status = 0;
-
-	// index 6
-	tmp1 = v1->input;
-	tmp2 = v1->output;
-	v2->srcport = v1->srcport;
-	v2->dstport = v1->dstport;
-
-	// save AS numbers
-	srcas = v1->srcas;
-	dstas = v1->dstas;
-
-	cplen = 0;
-	switch (v2->flags) {
-		case 0:
-			// IPv4 8 byte + 2 x 4 byte counter
-			cplen = 16;
-			break;
-		case 1:
-			// IPv6 32 byte + 2 x 4 byte counter
-			cplen = 40;
-			break;
-		case 2:
-			// IPv4 8 byte + 1 x 4 + 1 x 8 byte counter
-			cplen = 20;
-			break;
-		case 3:
-			// IPv6 32 byte + 1 x 4 + 1 x 8 byte counter
-			cplen = 44;
-			break;
-		case 4:
-			// IPv4 8 byte + 1 x 8 + 1 x 4 byte counter
-			cplen = 20;
-			break;
-		case 5:
-			// IPv6 32 byte + 1 x 8 + 1 x 4 byte counter
-			cplen = 44;
-			break;
-		case 6:
-			// IPv4 8 byte + 2 x 8 byte counter
-			cplen = 24;
-			break;
-		case 7:
-			// IPv6 32 byte + 2 x 8 byte counter
-			cplen = 48;
-			break;
-		default:
-			// this should never happen - catch it anyway
-			cplen = 0;
-	}
-	// copy IP/pkts/bytes block
-	memcpy((void *)&index[7], (void *)&index[9], cplen );
-
-	// hook 16 bit array at the end of copied block
-	tmp3 = (uint16_t *)&index[7+(cplen>>2)];
-	// 2 byte I/O interfaces 
-	tmp3[0] = tmp1;
-	tmp3[1] = tmp2;
-	// AS numbers
-	tmp3[2] = srcas;
-	tmp3[3] = dstas;
-
-} // End of Convert_v1_to_v2
-#endif
-

@@ -38,8 +38,6 @@ static inline void AppendToBuffer(nffile_t *nffile, void *record, size_t require
 
 static inline void CopyV6IP(uint32_t *dst, uint32_t *src);
 
-static inline int ConvertCommonV0(void *record, common_record_t *flow_record);
-
 static inline void ExpandRecord_v2(common_record_t *input_record, extension_info_t *extension_info, exporter_info_record_t *exporter_info, master_record_t *output_record );
 
 #ifdef NEED_PACKRECORD
@@ -74,25 +72,6 @@ static inline void CopyV6IP(uint32_t *dst, uint32_t *src) {
 	dst[2] = src[2];
 	dst[3] = src[3];
 } // End of CopyV6IP
-
-static inline int ConvertCommonV0(void *record, common_record_t *flow_record) {
-common_record_v0_t *flow_record_v0 = (common_record_v0_t *)record;
-
-	// copy v0 common record
-	memcpy((void *)flow_record, record, COMMON_RECORDV0_DATA_SIZE);
-	if ( flow_record_v0->size <= COMMON_RECORDV0_DATA_SIZE ) 
-		return 0;
-	memcpy((void *)flow_record->data, (void *)flow_record_v0->data, flow_record_v0->size - COMMON_RECORDV0_DATA_SIZE);
-
-	// fix record differences
-	flow_record->type			= CommonRecordType;
-	flow_record->size			+= (COMMON_RECORD_DATA_SIZE - COMMON_RECORDV0_DATA_SIZE);
-	flow_record->flags			= flow_record_v0->flags;
-	flow_record->exporter_sysid = flow_record_v0->exporter_sysid;
-	flow_record->reserved 		= 0;
-
-	return 1;
-} // End of ConvertCommonV0
 
 /*
  * Expand file record into master record for further processing
@@ -130,6 +109,7 @@ void		*p = (void *)input_record;
 	} else {
 		output_record->exp_ref 		  = NULL;
 	}
+	output_record->label = NULL;
 
 	// map icmp type/code in it's own vars
 	output_record->icmp = output_record->dstport;
@@ -725,6 +705,13 @@ int		i;
 				tpl->received = master_record->received;
 				p = (void *)tpl->data;
 				} break;
+			case EX_LATENCY: {
+				tpl_ext_latency_t *tpl = (tpl_ext_latency_t *)p;
+				tpl->client_nw_delay_usec = master_record->client_nw_delay_usec;
+				tpl->server_nw_delay_usec = master_record->server_nw_delay_usec;
+				tpl->appl_latency_usec	  = master_record->appl_latency_usec;
+				p = (void *)tpl->data;
+			} break;
 #ifdef NSEL
 			case EX_NSEL_COMMON: {
 				tpl_ext_37_t *tpl = (tpl_ext_37_t *)p;
@@ -800,7 +787,7 @@ int		i;
 		}
 	}
 
-	nffile->block_header->size 		+= required;
+	nffile->block_header->size += required;
 	nffile->block_header->NumRecords++;
 #ifdef DEVEL
 	if ( ((pointer_addr_t)p - (pointer_addr_t)nffile->buff_ptr) != required ) {

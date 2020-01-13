@@ -1,7 +1,5 @@
 /*  
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2019, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -48,6 +46,7 @@
 #include <stdint.h>
 #endif
 
+#include "util.h"
 #include "rbtree.h"
 #include "nfdump.h"
 #include "nffile.h"
@@ -57,8 +56,7 @@
 #include "exporter.h"
 #include "nfnet.h"
 #include "netflow_v5_v7.h"
-#include "nf_common.h"
-#include "util.h"
+#include "output_util.h"
 #include "nflowcache.h"
 #include "nfstat.h"
 
@@ -471,8 +469,6 @@ static inline int TimeMsec_CMP(time_t t1, uint16_t offset1, time_t t2, uint16_t 
 
 static SortElement_t *StatTopN(int topN, uint32_t *count, int hash_num, int order );
 
-static void SwapFlow(master_record_t *flow_record);
-
 /* locals */
 static hash_StatTable *StatTable;
 static SumRecord_t SumRecord;
@@ -486,41 +482,47 @@ static int initialised = 0;
 #include "applybits_inline.c"
 
 static uint64_t	null_record(FlowTableRecord_t *record, int inout) {
-        return 0;
+	return 0;
 }
 
 static uint64_t	flows_record(FlowTableRecord_t *record, int inout) {
-        return record->counter[FLOWS];
+	return record->counter[FLOWS];
 }
 
 static uint64_t	packets_record(FlowTableRecord_t *record, int inout) {
-		if ( GuessDirection && (record->flowrecord.srcport < record->flowrecord.dstport) ) {
-			if (inout == IN)
-				inout = OUT;
-			else if (inout == OUT)
-				inout = IN;
-		}
-        if (inout == IN)
-                return record->counter[INPACKETS];
-        else if (inout == OUT)
-                return record->counter[OUTPACKETS];
-        else
-                return record->counter[INPACKETS] + record->counter[OUTPACKETS];
+	if ( GuessDirection && 
+	   ( record->flowrecord.prot == IPPROTO_TCP || record->flowrecord.prot == IPPROTO_UDP) &&
+	   ( record->flowrecord.srcport < 1024 ) && ( record->flowrecord.dstport > 1024 ) &&
+	   ( record->flowrecord.srcport < record->flowrecord.dstport) ) {
+		if (inout == IN)
+			inout = OUT;
+		else if (inout == OUT)
+			inout = IN;
+	}
+	if (inout == IN)
+		return record->counter[INPACKETS];
+	else if (inout == OUT)
+		return record->counter[OUTPACKETS];
+	else
+		return record->counter[INPACKETS] + record->counter[OUTPACKETS];
 }
 
 static uint64_t	bytes_record(FlowTableRecord_t *record, int inout) {
-		if ( GuessDirection && (record->flowrecord.srcport < record->flowrecord.dstport) ) {
-			if (inout == IN)
-				inout = OUT;
-			else if (inout == OUT)
-				inout = IN;
-		}
-        if (inout == IN)
-                return record->counter[INBYTES];
-        else if (inout == OUT)
-                return record->counter[OUTBYTES];
-        else
-                return record->counter[INBYTES] + record->counter[OUTBYTES];
+	if ( GuessDirection && 
+	   ( record->flowrecord.prot == IPPROTO_TCP || record->flowrecord.prot == IPPROTO_UDP) &&
+	   ( record->flowrecord.srcport < 1024 ) && ( record->flowrecord.dstport > 1024 ) &&
+	   ( record->flowrecord.srcport < record->flowrecord.dstport) ) {
+		if (inout == IN)
+			inout = OUT;
+		else if (inout == OUT)
+			inout = IN;
+	}
+	if (inout == IN)
+		return record->counter[INBYTES];
+	else if (inout == OUT)
+		return record->counter[OUTBYTES];
+	else
+		return record->counter[INBYTES] + record->counter[OUTBYTES];
 }
 
 static uint64_t	pps_record(FlowTableRecord_t *record, int inout) {
@@ -546,7 +548,7 @@ uint64_t		bytes;
 	if ( duration == 0 )
 		return 0;
 	else {
-                bytes = bytes_record(record, inout);
+		bytes = bytes_record(record, inout);
 		return ( 8000LL * bytes ) / duration;	/* 8 bits per Octet - x 1000 for msec */
 	}
 
@@ -573,29 +575,29 @@ static uint64_t	tend_record(FlowTableRecord_t *record, int inout) {
 } // End of tend_record
 
 static uint64_t	null_element(StatRecord_t *record, int inout) {
-        return 0;
+	return 0;
 }
 
 static uint64_t	flows_element(StatRecord_t *record, int inout) {
-        return record->counter[FLOWS];
+	return record->counter[FLOWS];
 }
 
 static uint64_t	packets_element(StatRecord_t *record, int inout) {
-        if (inout == IN)
-                return record->counter[INPACKETS];
-        else if (inout == OUT)
-                return record->counter[OUTPACKETS];
-        else
-                return record->counter[INPACKETS] + record->counter[OUTPACKETS];
+	if (inout == IN)
+		return record->counter[INPACKETS];
+	else if (inout == OUT)
+		return record->counter[OUTPACKETS];
+	else
+		return record->counter[INPACKETS] + record->counter[OUTPACKETS];
 }
 
 static uint64_t	bytes_element(StatRecord_t *record, int inout) {
-        if (inout == IN)
-                return record->counter[INBYTES];
-        else if (inout == OUT)
-                return record->counter[OUTBYTES];
-        else
-                return record->counter[INBYTES] + record->counter[OUTBYTES];
+	if (inout == IN)
+		return record->counter[INBYTES];
+	else if (inout == OUT)
+		return record->counter[OUTBYTES];
+	else
+		return record->counter[INBYTES] + record->counter[OUTBYTES];
 }
 
 static uint64_t	pps_element(StatRecord_t *record, int inout) {
@@ -607,7 +609,7 @@ uint64_t		packets;
 	if ( duration == 0 )
 		return 0;
 	else {
-	        packets = packets_element(record, inout);
+		packets = packets_element(record, inout);
 		return ( 1000LL * packets ) / duration;
 	}
 
@@ -621,7 +623,7 @@ uint64_t		bytes;
 	if ( duration == 0 )
 		return 0;
 	else {
-	        bytes = bytes_element(record, inout);
+        bytes = bytes_element(record, inout);
 		return ( 8000LL * bytes ) / duration;	/* 8 bits per Octet - x 1000 for msec */
 	}
 
@@ -913,8 +915,7 @@ int i=0;
 
 	// no order is given - default order applies;
 	if ( !q ) {
-		free(s);
-		return 1;
+		q = "/flows";  // default to flows
 	}
 
 	// check if one or more orders are given
@@ -1012,14 +1013,14 @@ static void Expand_StatTable_Blocks(int hash_num) {
 	if ( StatTable[hash_num].NumBlocks >= StatTable[hash_num].MaxBlocks ) {
 		StatTable[hash_num].MaxBlocks += MaxMemBlocks;
 		StatTable[hash_num].memblock = (StatRecord_t **)realloc(StatTable[hash_num].memblock,
-						StatTable[hash_num].MaxBlocks * sizeof(StatRecord_t *));
+			StatTable[hash_num].MaxBlocks * sizeof(StatRecord_t *));
 		if ( !StatTable[hash_num].memblock ) {
 			fprintf(stderr, "realloc() error in %s line %d: %s\n", __FILE__, __LINE__, strerror (errno));
 			exit(250);
 		}
 	}
 	StatTable[hash_num].memblock[StatTable[hash_num].NumBlocks] = 
-			(StatRecord_t *)calloc(StatTable[hash_num].Prealloc, sizeof(StatRecord_t));
+		(StatRecord_t *)calloc(StatTable[hash_num].Prealloc, sizeof(StatRecord_t));
 
 	if ( !StatTable[hash_num].memblock[StatTable[hash_num].NumBlocks] ) {
 		fprintf(stderr, "calloc() error in %s line %d: %s\n", __FILE__, __LINE__, strerror (errno));
@@ -1123,7 +1124,7 @@ int	j, i;
 } // End of AddStat
 
 static void PrintStatLine(stat_record_t	*stat, uint32_t plain_numbers, StatRecord_t *StatData, int type, int order_proto, int tag, int inout) {
-char		proto[16], valstr[40], datestr[64];
+char		valstr[40], datestr[64];
 char		flows_str[NUMBER_STRING_SIZE], byte_str[NUMBER_STRING_SIZE], packets_str[NUMBER_STRING_SIZE];
 char		pps_str[NUMBER_STRING_SIZE], bps_str[NUMBER_STRING_SIZE];
 char tag_string[2];
@@ -1151,7 +1152,7 @@ struct tm	*tbuff;
 				_key[1] = htonll(StatData->stat_key[1]);
 				inet_ntop(AF_INET6, _key, valstr, sizeof(valstr));
 				if ( ! Getv6Mode() )
-					condense_v6(valstr);
+					CondenseV6(valstr);
 	
 			} else {	// IPv4
 				uint32_t	ipv4;
@@ -1254,23 +1255,18 @@ struct tm	*tbuff;
 	}
 	strftime(datestr, 63, "%Y-%m-%d %H:%M:%S", tbuff);
 
-	if ( order_proto ) {
-		Proto_string(StatData->prot, proto);
-	} else {
-		snprintf(proto, 15, "any  ");
-		proto[15] = 0;
-	}
-
 	if ( Getv6Mode() && ( type == IS_IPADDR ) )
-		printf("%s.%03u %9.3f %s %s%39s %8s(%4.1f) %8s(%4.1f) %8s(%4.1f) %8s %8s %5u\n", 
-				datestr, StatData->msec_first, duration, proto, tag_string, valstr, 
-				flows_str, flows_percent, packets_str, packets_percent, byte_str,
-				bytes_percent, pps_str, bps_str, bpp );
+		printf("%s.%03u %9.3f %-5s %s%39s %8s(%4.1f) %8s(%4.1f) %8s(%4.1f) %8s %8s %5u\n", 
+			datestr, StatData->msec_first, duration, 
+			order_proto ? ProtoString(StatData->prot) : "any", tag_string, valstr, 
+			flows_str, flows_percent, packets_str, packets_percent, byte_str,
+			bytes_percent, pps_str, bps_str, bpp );
 	else {
-                printf("%s.%03u %9.3f %s %s%17s %8s(%4.1f) %8s(%4.1f) %8s(%4.1f) %8s %8s %5u\n",
-                                datestr, StatData->msec_first, duration, proto, tag_string, valstr,
-                                flows_str, flows_percent, packets_str, packets_percent, byte_str,
-                                bytes_percent, pps_str, bps_str, bpp );
+		printf("%s.%03u %9.3f %-5s %s%17s %8s(%4.1f) %8s(%4.1f) %8s(%4.1f) %8s %8s %5u\n",
+		datestr, StatData->msec_first, duration, 
+		order_proto ? ProtoString(StatData->prot) : "any", tag_string, valstr,
+		flows_str, flows_percent, packets_str, packets_percent, byte_str,
+		bytes_percent, pps_str, bps_str, bpp );
 	}
 
 } // End of PrintStatLine
@@ -1325,24 +1321,24 @@ int			af;
 
 	if ( type == IS_IPADDR )
 		printf("%i|%u|%u|%u|%u|%u|%u|%u|%u|%u|%llu|%llu|%llu|%u|%u|%u\n",
-				af, StatData->first, StatData->msec_first ,StatData->last, StatData->msec_last, StatData->prot, 
-				sa[0], sa[1], sa[2], sa[3], (long long unsigned)count_flows,
-				(long long unsigned)count_packets, (long long unsigned)count_bytes,
-				pps, bps, bpp);
+			af, StatData->first, StatData->msec_first ,StatData->last, StatData->msec_last, StatData->prot, 
+			sa[0], sa[1], sa[2], sa[3], (long long unsigned)count_flows,
+			(long long unsigned)count_packets, (long long unsigned)count_bytes,
+			pps, bps, bpp);
 	else
 		printf("%i|%u|%u|%u|%u|%u|%llu|%llu|%llu|%llu|%u|%u|%u\n",
-				af, StatData->first, StatData->msec_first ,StatData->last, StatData->msec_last, StatData->prot, 
-				(long long unsigned)_key[1], (long long unsigned)count_flows,
-				(long long unsigned)count_packets, (long long unsigned)count_bytes,
-				pps, bps, bpp);
+			af, StatData->first, StatData->msec_first ,StatData->last, StatData->msec_last, StatData->prot, 
+			(long long unsigned)_key[1], (long long unsigned)count_flows,
+			(long long unsigned)count_packets, (long long unsigned)count_bytes,
+			pps, bps, bpp);
 
 } // End of PrintPipeStatLine
 
 static void PrintCvsStatLine(stat_record_t	*stat, StatRecord_t *StatData, int type, int order_proto, int tag, int inout) {
-char		proto[16], valstr[40], datestr1[64], datestr2[64];
+char		valstr[40], datestr1[64], datestr2[64];
 uint64_t	count_flows, count_packets, count_bytes;
 double		duration, flows_percent, packets_percent, bytes_percent;
-uint32_t	i, bpp;
+uint32_t	bpp;
 uint64_t	pps, bps;
 time_t		when;
 struct tm	*tbuff;
@@ -1425,26 +1421,13 @@ struct tm	*tbuff;
 	}
 	strftime(datestr2, 63, "%Y-%m-%d %H:%M:%S", tbuff);
 
-	if ( order_proto ) {
-		Proto_string(StatData->prot, proto);
-	} else {
-		snprintf(proto, 15, "any  ");
-		proto[15] = 0;
-	}
-
-	i=0;
-	while ( proto[i] ) {
-		if ( proto[i] == ' ' )
-			proto[i] = '\0';
-		i++;
-	}
-
-        printf("%s,%s,%.3f,%s,%s,%llu,%.1f,%llu,%.1f,%llu,%.1f,%llu,%llu,%u\n",
-                datestr1, datestr2, duration, proto, valstr,
-                (long long unsigned)count_flows, flows_percent,
-                (long long unsigned)count_packets, packets_percent,
-                (long long unsigned)count_bytes, bytes_percent,
-                (long long unsigned)pps,(long long unsigned)bps,bpp);
+	printf("%s,%s,%.3f,%s,%s,%llu,%.1f,%llu,%.1f,%llu,%.1f,%llu,%llu,%u\n",
+		datestr1, datestr2, duration, 
+		order_proto ? ProtoString(StatData->prot) : "any", valstr,
+		(long long unsigned)count_flows, flows_percent,
+		(long long unsigned)count_packets, packets_percent,
+		(long long unsigned)count_bytes, bytes_percent,
+		(long long unsigned)pps,(long long unsigned)bps,bpp);
 
 } // End of PrintCvsStatLine
 
@@ -1474,7 +1457,7 @@ char				*string;
 		}
 
 		// preset SortList table - still unsorted
-		for ( i=0; i<FlowTable->IndexMask; i++ ) {
+		for ( i=0; i<=FlowTable->IndexMask; i++ ) {
 			r = FlowTable->bucket[i];
 			if ( !r ) 
 				continue;
@@ -1517,7 +1500,7 @@ char				*string;
 	} else {
 		// print them as they came
 		c = 0;
-		for ( i=0; i<FlowTable->IndexMask; i++ ) {
+		for ( i=0; i<=FlowTable->IndexMask; i++ ) {
 			r = FlowTable->bucket[i];
 			while ( r ) {
 				master_record_t	*flow_record;
@@ -1567,8 +1550,13 @@ char				*string;
 				if ( aggr_record_mask ) {
 					ApplyAggrMask(flow_record, aggr_record_mask);
 				}
-				if ( GuessDir && ( flow_record->srcport < flow_record->dstport ) )
+
+				if ( GuessDir && 
+				   ( flow_record->prot == IPPROTO_TCP || flow_record->prot == IPPROTO_UDP) &&
+	   			   ( flow_record->srcport < 1024 ) && ( flow_record->dstport > 1024 ) &&
+				   ( flow_record->srcport < flow_record->dstport ) )
 					SwapFlow(flow_record);
+
 				print_record((void *)flow_record, &string, tag);
 				printf("%s\n", string);
 
@@ -1577,10 +1565,9 @@ char				*string;
 			}
 		}
 	}
-
 } // End of PrintFlowTable
 
-void PrintFlowStat(char *record_header, printer_t print_record, int topN, int tag, int quiet, int cvs_output, extension_map_list_t *extension_map_list) {
+void PrintFlowStat(func_prolog_t record_header, printer_t print_record, int topN, int tag, int quiet, int cvs_output, extension_map_list_t *extension_map_list) {
 hash_FlowTable *FlowTable;
 FlowTableRecord_t	*r;
 SortElement_t 		*SortList;
@@ -1608,7 +1595,7 @@ uint32_t			maxindex, c;
 	}
 
 	// preset SortList table - still unsorted
-	for ( i=0; i<FlowTable->IndexMask; i++ ) {
+	for ( i=0; i<=FlowTable->IndexMask; i++ ) {
 		r = FlowTable->bucket[i];
 		if ( !r ) 
 			continue;
@@ -1657,7 +1644,7 @@ uint32_t			maxindex, c;
 				printf("Top flows ordered by %s:\n", order_mode[order_index].string);
 		}
 		if ( record_header ) 
-			printf("%s\n", record_header);
+			record_header();
 	}
 
 	PrintSortedFlowcache(SortList, maxindex, topN, 0, print_record, tag, DESCENDING, extension_map_list);
@@ -1685,7 +1672,7 @@ uint32_t			maxindex, c;
 						printf("Top flows ordered by %s:\n", order_mode[order_index].string);
 				}
 				if ( record_header ) 
-					printf("%s\n", record_header);
+					record_header();
 			}
 			PrintSortedFlowcache(SortList, maxindex, topN, 0, print_record, tag, DESCENDING, extension_map_list);
 
@@ -1750,7 +1737,10 @@ int	i, max;
 		} else if ( aggr_record_mask )
 			ApplyAggrMask(flow_record, aggr_record_mask);
 
-		if ( GuessFlowDirection && ( flow_record->srcport < flow_record->dstport ) )
+		if ( GuessFlowDirection && 
+		   ( flow_record->prot == IPPROTO_TCP || flow_record->prot == IPPROTO_UDP) &&
+	 	   ( flow_record->srcport < 1024 ) && ( flow_record->dstport > 1024 ) &&
+		   ( flow_record->srcport < flow_record->dstport ) )
 			SwapFlow(flow_record);
 
 		print_record((void *)flow_record, &string, tag);
@@ -1759,7 +1749,7 @@ int	i, max;
 
 } // End of PrintSortedFlowcache
 
-void PrintElementStat(stat_record_t	*sum_stat, uint32_t limitflows, char *record_header, printer_t print_record, int topN, int tag, int quiet, int pipe_output, int cvs_output) {
+void PrintElementStat(stat_record_t	*sum_stat, uint32_t limitflows, printer_t print_record, int topN, int tag, int quiet, int pipe_output, int cvs_output) {
 SortElement_t	*topN_element_list;
 uint32_t		numflows;
 int32_t 		i, j, hash_num, order_index;
@@ -1897,7 +1887,7 @@ uint32_t	   		c, maxindex;
 } // End of StatTopN
 
 
-static void SwapFlow(master_record_t *flow_record) {
+void SwapFlow(master_record_t *flow_record) {
 uint64_t _tmp_ip[2];
 uint64_t _tmp_l;
 uint32_t _tmp;

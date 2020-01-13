@@ -1,6 +1,5 @@
 /*
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2019, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -28,12 +27,6 @@
  *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
  *  POSSIBILITY OF SUCH DAMAGE.
  *  
- *  $Author: haag $
- *
- *  $Id: nfx.c 58 2010-02-26 12:26:07Z haag $
- *
- *  $LastChangedRevision: 58 $
- *	
  */
 
 #include "config.h"
@@ -52,15 +45,8 @@
 #include <stdint.h>
 #endif
 
-#ifndef DEVEL
-#   define dbg_printf(...) /* printf(__VA_ARGS__) */
-#else
-#   define dbg_printf(...) printf(__VA_ARGS__)
-#endif
-
-#include "nf_common.h"
-#include "nffile.h"
 #include "util.h"
+#include "nffile.h"
 #include "nfx.h"
 
 /* global vars */
@@ -139,7 +125,7 @@ extension_descriptor_t extension_descriptor[] = {
 
 uint32_t Max_num_extensions;
 
-void FixExtensionMap(extension_map_t *map);
+static int VerifyExtensionMap(extension_map_t *map);
 
 extension_map_list_t *InitExtensionMaps(int AllocateList) {
 extension_map_list_t *list = NULL;
@@ -196,9 +182,20 @@ int Insert_Extension_Map(extension_map_list_t *extension_map_list, extension_map
 extension_info_t *l;
 uint16_t map_id;
 
+	if ( map->size < sizeof(extension_map_t) ) { // at least 1 extension required
+		LogError("Corrupt extension map in %s line %d\n", __FILE__, __LINE__);
+		return -1;
+	}
+
+	if ( !VerifyExtensionMap(map) ) {
+		LogError("Corrupt extension map in %s line %d\n", __FILE__, __LINE__);
+		return -1;
+	}
+
 	map_id = map->map_id == INIT_ID ? 0 : map->map_id & EXTENSION_MAP_MASK;
 	map->map_id = map_id;
 	dbg_printf("Insert Extension Map:\n");
+
 #ifdef DEVEL
 	PrintExtensionMap(map);
 #endif
@@ -257,12 +254,13 @@ uint16_t map_id;
 		}
 		l->ref_count 	= 0;
 		l->next 		= NULL;
+		l->exportMap 	= NULL;
 		memset((void *)&l->master_record, 0, sizeof(master_record_t));
 
 		l->map   = (extension_map_t *)malloc((ssize_t)map->size);
 		if ( !l->map ) {
 			fprintf(stderr, "malloc() error in %s line %d: %s\n", __FILE__, __LINE__, strerror(errno) );
-			exit(255);
+			return -1;
 		}
 		memcpy((void *)l->map, (void *)map, map->size);
 
@@ -270,8 +268,6 @@ uint16_t map_id;
 		*(extension_map_list->last_map) = l;
 		extension_map_list->last_map 	= &l->next;
 
-		// Sanity check
-		FixExtensionMap(map);
 	}
 
 	// l is now our valid extension
@@ -476,18 +472,16 @@ int i;
 
 } // End of PrintExtensionMap
 
-int VerifyExtensionMap(extension_map_t *map) {
-int i, failed, extension_size, max_elements;
+static int VerifyExtensionMap(extension_map_t *map) {
+int i, extension_size, max_elements;
 
-	failed = 0;
 	if (( map->size & 0x3 ) != 0 ) {
-		printf("Verify map id %i: WARNING: map size %i not aligned!\n", map->map_id, map->size);
-		failed = 1;
+		LogError("Verify map id %i: WARNING: map size %i not aligned!", map->map_id, map->size);
+		return 0;
 	}
 
-	if ( ((int)map->size - (int)sizeof(extension_map_t)) <= 0 ) {
-		printf("Verify map id %i: ERROR: map size %i too small!\n", map->map_id, map->size);
-		failed = 1;
+	if ( map->size <= sizeof(extension_map_t) ) {
+		LogError("Verify map id %i: ERROR: map size %i too small", map->map_id, map->size);
 		return 0;
 	}
 
@@ -497,71 +491,32 @@ int i, failed, extension_size, max_elements;
 	while (map->ex_id[i] && i <= max_elements) {
 		int id = map->ex_id[i];
 		if ( id > Max_num_extensions ) {
-			printf("Verify map id %i: ERROR: element id %i out of range [%i]!\n", map->map_id, id, Max_num_extensions);
-			failed = 1;
+			LogError("Verify map id %i: ERROR: element id %i out of range [%i]", map->map_id, id, Max_num_extensions);
+			return 0;
 		}
 		extension_size += extension_descriptor[id].size;
 		i++;
 	}
 
-	if ( (extension_size != map->extension_size ) ) {
-		printf("Verify map id %i: ERROR extension size: Expected %i, Map reports: %i!\n",  map->map_id,
-			extension_size, map->extension_size);
-		failed = 1;
-	}
-	if ( (i != max_elements ) && ((max_elements-i) != 1) ) {
-		// off by 1 is the opt alignment
-		printf("Verify map id %i: ERROR: Expected %i elements in map, but found %i!\n", map->map_id, max_elements, i);
-		failed = 1;
+	if ( i != max_elements && (i+1) != max_elements ) {
+		LogError("Verify map id %i: map has a zero element", map->map_id);
+		return 0;
 	}
 
-	return failed;
+	if ( map->ex_id[i] != 0 ) {
+		LogError("Verify map id %i: ERROR: no zero element", map->map_id);
+		return 0;
+	}
+
+	if ( (extension_size != map->extension_size ) ) {
+		LogError("Verify map id %i: ERROR: extension size: Expected %i, Map reports: %i",  map->map_id,
+			extension_size, map->extension_size);
+		return 0;
+	}
+
+	return 1;
 
 } // End of VerifyExtensionMap
-
-/*
- * Sanity check of map
- */
-void FixExtensionMap(extension_map_t *map) {
-int i, extension_size, max_elements;
-
-	if (( map->size & 0x3 ) != 0 ) {
-		printf("PANIC! - Verify map id %i: WARNING: map size %i not aligned!\n", map->map_id, map->size);
-		exit(255);
-	}
-
-	if ( ((int)map->size - (int)sizeof(extension_map_t)) <= 0 ) {
-		printf("PANIC! - Verify map id %i: ERROR: map size %i too small!\n", map->map_id, map->size);
-		exit(255);
-	}
-
-	max_elements = (map->size - sizeof(extension_map_t)) / sizeof(uint16_t);
-	extension_size = 0;
-	i=0;
-	while (map->ex_id[i] && i <= max_elements) {
-		int id = map->ex_id[i];
-		if ( id > Max_num_extensions ) {
-			printf("PANIC! - Verify map id %i: ERROR: element id %i out of range [%i]!\n", map->map_id, id, Max_num_extensions);
-			exit(255);
-		}
-		extension_size += extension_descriptor[id].size;
-		i++;
-	}
-
-	// silently fix extension size bug of nfdump <= 1.6.2 ..
-	if ( (extension_size != map->extension_size ) ) {
-#ifdef DEVEL
-		printf("FixExtension map extension size from %i to %i\n", map->extension_size, extension_size);
-#endif
-		map->extension_size = extension_size;
-	}
-
-	if ( (i != max_elements ) && ((max_elements-i) != 1) ) {
-		// off by 1 is the opt alignment
-		printf("Verify map id %i: ERROR: Expected %i elements in map, but found %i!\n", map->map_id, max_elements, i);
-	}
-
-} // End of FixExtensionMap
 
 void DumpExMaps(char *filename) {
 int done;
@@ -620,7 +575,8 @@ uint64_t total_bytes;
 
 			if ( flow_record->type == ExtensionMapType ) {
 				extension_map_t *map = (extension_map_t *)flow_record;
-				VerifyExtensionMap(map);
+				if ( !VerifyExtensionMap(map) )
+					return;
 				PrintExtensionMap(map);
 			}
 

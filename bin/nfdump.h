@@ -1,7 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2019, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -75,8 +73,6 @@ int yylex(void);
 void lex_cleanup(void);
 
 void lex_init(char *buf);
-
-int ScreenIPString(char *string);
 
 int ScreenIdentString(char *string);
 
