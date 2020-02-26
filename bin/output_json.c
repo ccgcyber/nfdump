@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2019, Peter Haag
+ *  Copyright (c) 2019-2020, Peter Haag
  *  All rights reserved.
  *  
  *  Redistribution and use in source and binary forms, with or without 
@@ -48,7 +48,9 @@
 #endif
 
 #include "util.h"
+#include "nfdump.h"
 #include "nffile.h"
+#include "nfx.h"
 #include "output_util.h"
 #include "output_json.h"
 
@@ -410,9 +412,10 @@ extension_map_t	*extension_map = r->map_ref;
 "	\"event_id\" : \"%u\",\n"
 "	\"event\" : \"%s\",\n"
 "	\"xevent_id\" : \"%u\",\n"
+"	\"sgt_id\" : \"%u\",\n"
 "	\"t_event\" : \"%s\",\n"
 , r->conn_id, r->event, r->event_flag == FW_EVENT ? FwEventString(r->event) : EventString(r->event)
-, r->fw_xevent, datestr);
+, r->fw_xevent, r->sec_group_tag, datestr);
 				free(datestr);
 				} break;
 			case EX_NEL_COMMON: {

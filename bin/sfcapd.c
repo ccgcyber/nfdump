@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2009-2019, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -66,9 +66,9 @@
 #endif
 
 #include "util.h"
+#include "nfdump.h"
 #include "nffile.h"
 #include "nfx.h"
-#include "nf_common.h"
 #include "nfnet.h"
 #include "bookkeeper.h"
 #include "collector.h"
@@ -356,7 +356,7 @@ void 		*in_buff;
 int 		err;
 srecord_t	*commbuff;
 
-	Init_sflow();
+	Init_sflow(verbose);
 
 	in_buff  = malloc(NETWORK_INPUT_BUFF_SIZE);
 	if ( !in_buff ) {
@@ -443,7 +443,7 @@ srecord_t	*commbuff;
 
 		if ( ((t_now - t_start) >= twin) || done ) {
 			struct  tm *now;
-			char	*subdir, fmt[24];
+			char	*subdir, fmt[MAXTIMESTRING];
 
 			alarm(0);
 			now = localtime(&t_start);
@@ -565,9 +565,10 @@ srecord_t	*commbuff;
 			if ( launcher_pid ) {
 				// Signal launcher
 		
-				strncpy(commbuff->tstring, fmt, MAXTIMESTRING-1);
-				commbuff->tstamp = t_start;
+				strncpy(commbuff->tstring, fmt, MAXTIMESTRING);
+				commbuff->tstring[MAXTIMESTRING-1] = '\0';
 
+				commbuff->tstamp = t_start;
 				if ( subdir ) {
 					snprintf(commbuff->fname, MAXPATHLEN-1, "%s/nfcapd.%s", subdir, fmt);
 				} else {
@@ -809,7 +810,12 @@ char	*pcap_file = NULL;
 						exit(255);
 					}
 					tmp[MAXPATHLEN-1] = 0;
-					snprintf(pidfile, MAXPATHLEN - 1 - strlen(tmp), "%s/%s", tmp, optarg);
+					if ( (strlen(tmp) + strlen(optarg) + 3) < MAXPATHLEN ) {
+						snprintf(pidfile, MAXPATHLEN - 3 - strlen(tmp), "%s/%s", tmp, optarg);
+					} else {
+						fprintf(stderr, "pidfile MAXPATHLEN error:\n");
+						exit(255);
+					}
 				}
 				// pidfile now absolute path
 				pidfile[MAXPATHLEN-1] = 0;
@@ -920,7 +926,7 @@ char	*pcap_file = NULL;
 		exit(255);
 	}
 
-	if ( !InitLog(argv[0], SYSLOG_FACILITY)) {
+	if ( !InitLog(do_daemonize, argv[0], SYSLOG_FACILITY, verbose) ) {
 		exit(255);
 	}
 

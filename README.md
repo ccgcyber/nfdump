@@ -1,13 +1,13 @@
 # nfdump
 
-Stable Release v1.6.18
+Stable Release v1.6.19
 
-See the Changelog file for all changes in release 1.6.18
+See the Changelog file for all changes in release 1.6.19
 
 nfdump is a toolset in order to collect and process netflow and sflow data, sent from netflow/sflow compatible devices. 
 The toolset supports netflow __v1__, __v5/v7__,__v9__,__IPFIX__ and __SFLOW__.  nfdump supports IPv4 as well as IPv6.
 
-__Note:__ nfdump 1.6.18 __not longer__ supports nfdump-1.5.x files. If you have nfdump-1.5.x please convert them
+__Note:__ nfdump 1.6.18 and newer versions __not longer__ support nfdump-1.5.x files. If you have nfdump-1.5.x please convert them
 before upgrading.
 
 nfdump is used as backend toolset for __NfSen__.
@@ -215,7 +215,7 @@ It is assumed, that host level security is in place to filter the
 proper IP addresses.
 
 See the manual pages or use the -h switch for details on using each of 
-the programs. For any questions send email to phaag@users.sourceforge.net
+the programs. For any questions send email to peter@people.ops-trust.net
 
 Configure your router to export netflow. See the relevant documentation
 for your model. 
@@ -383,6 +383,7 @@ Tag | ID
 ----|---
 NF_N_NAT_EVENT | 230
 NF_N_INGRESS_VRFID | 234
+NF_N_EGRESS_VRFID | 235
 NF_N_NAT_INSIDE_GLOBAL_IPV4 | 225
 NF_N_NAT_OUTSIDE_GLOBAL_IPV4 | 226
 NF_N_POST_NAPT_SRC_PORT | 	227

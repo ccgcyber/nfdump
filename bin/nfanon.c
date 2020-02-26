@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2009-2019, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -51,17 +51,13 @@
 #include <stdint.h>
 #endif
 
+#include "util.h"
+#include "nfdump.h"
 #include "nffile.h"
 #include "nfx.h"
-#include "util.h"
+#include "exporter.h"
 #include "flist.h"
 #include "panonymizer.h"
-
-#if ( SIZEOF_VOID_P == 8 )
-typedef uint64_t    pointer_addr_t;
-#else
-typedef uint32_t    pointer_addr_t;
-#endif
 
 // module limited globals
 extension_map_list_t *extension_map_list;
@@ -298,11 +294,6 @@ char		outfile[MAXPATHLEN], *cfile;
 				} break; // not really needed
 		}
 
-		if ( nffile_r->block_header->id == Large_BLOCK_Type ) {
-			// skip
-			continue;
-		}
-
 		if ( nffile_r->block_header->id != DATA_BLOCK_TYPE_2 ) {
 			fprintf(stderr, "Can't process block type %u. Skip block.\n", nffile_r->block_header->id);
 			continue;
@@ -348,8 +339,8 @@ char		outfile[MAXPATHLEN], *cfile;
 							exit(255);
 					}
 					} break; 
-				case ExporterRecordType:
-				case SamplerRecordype:
+				case LegacyRecordType1:
+				case LegacyRecordType2:
 				case ExporterInfoRecordType:
 				case ExporterStatRecordType:
 				case SamplerInfoRecordype:
@@ -405,7 +396,7 @@ char		CryptoPAnKey[32];
 				PAnonymizer_Init((uint8_t *)CryptoPAnKey);
 				break;
 			case 'L':
-				if ( !InitLog("argv[0]", optarg) )
+				if ( !InitLog(0, "argv[0]", optarg, 0) )
 					exit(255);
 				break;
 			case 'r':

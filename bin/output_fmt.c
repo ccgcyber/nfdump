@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2009-2019, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -47,10 +47,12 @@
 #include <stdint.h>
 #endif
 
-#include "nffile.h"
-#include "output_util.h"
-#include "nf_common.h"
 #include "util.h"
+#include "nfdump.h"
+#include "nffile.h"
+#include "nfx.h"
+#include "output_util.h"
+#include "output_fmt.h"
 
 typedef void (*string_function_t)(master_record_t *, char *);
 
@@ -83,7 +85,7 @@ static char data_string[STRINGSIZE];
 static char tag_string[2];
 
 /* prototypes */
-static inline void ICMP_Port_decode(master_record_t *r, char *string);
+static char *ICMP_Port_decode(master_record_t *r);
 
 static void InitFormatParser(void);
 
@@ -234,6 +236,8 @@ static void String_evt(master_record_t *r, char *string);
 
 static void String_xevt(master_record_t *r, char *string);
 
+static void String_sgt(master_record_t *r, char *string);
+
 static void String_msec(master_record_t *r, char *string);
 
 static void String_iacl(master_record_t *r, char *string);
@@ -349,6 +353,7 @@ static struct format_token_list_s {
 	{ "%tevt", 	0, "Event time             ",String_EventTime },		// NSEL Flow start time
 	{ "%evt",   0, " Event", 				String_evt },				// NSEL event
 	{ "%xevt",  0, " XEvent", 				String_xevt },				// NSEL xevent
+	{ "%sgt",   0, "  SGT  ", 				String_sgt },				// NSEL xevent
 	{ "%msec",  0, "   Event Time", 		String_msec},				// NSEL event time in msec
 	{ "%iacl",  0, "Ingress ACL                     ", String_iacl}, 	// NSEL ingress ACL
 	{ "%eacl",  0, "Egress ACL                      ", String_eacl}, 	// NSEL egress ACL
@@ -583,13 +588,13 @@ int	i, remaining;
 		} else {			// it's a static string
 			/* a static string goes up to next '%' or end of string */
 			char *p = strchr(c, '%');
-			char format[16];
+			char format[32];
 			if ( p ) {
 				// p points to next '%' token
 				*p = '\0';
 				AddString(strdup(c));
-				snprintf(format, 15, "%%%zus", strlen(c));
-				format[15] = '\0';
+				snprintf(format, 31, "%%%zus", strlen(c));
+				format[31] = '\0';
 				snprintf(h, STRINGSIZE-1-strlen(h), format, "");
 				h += strlen(h);
 				*p = '%';
@@ -597,8 +602,8 @@ int	i, remaining;
 			} else {
 				// static string up to end of format string
 				AddString(strdup(c));
-				snprintf(format, 15, "%%%zus", strlen(c));
-				format[15] = '\0';
+				snprintf(format, 31, "%%%zus", strlen(c));
+				format[31] = '\0';
 				snprintf(h, STRINGSIZE-1-strlen(h), format, "");
 				h += strlen(h);
 				*c = '\0';
@@ -611,14 +616,18 @@ int	i, remaining;
 
 } // End of ParseOutputFormat
 
-static inline void ICMP_Port_decode(master_record_t *r, char *string) {
+static char *ICMP_Port_decode(master_record_t *r) {
+#define ICMPSTRLEN 16
+static char icmp_string[ICMPSTRLEN];
 
 	if ( r->prot == IPPROTO_ICMP || r->prot == IPPROTO_ICMPV6 ) { // ICMP
-		snprintf(string, MAX_STRING_LENGTH-1, "%u.%u",  r->icmp_type, r->icmp_code);
+		snprintf(icmp_string, ICMPSTRLEN-1, "%u.%u",  r->icmp_type, r->icmp_code);
 	} else { 	// dst port
-		snprintf(string, MAX_STRING_LENGTH-1, "%u",  r->dstport);
+		snprintf(icmp_string, ICMPSTRLEN-1, "%u",  r->dstport);
 	}
-	string[MAX_STRING_LENGTH-1] = '\0';
+	icmp_string[ICMPSTRLEN-1] = '\0';
+
+	return icmp_string;
 
 } // End of ICMP_Port_decode
 
@@ -904,7 +913,6 @@ char tmp_str[IP_STRING_LEN];
 
 static void String_DstAddrPort(master_record_t *r, char *string) {
 char 	tmp_str[IP_STRING_LEN], portchar;
-char 	icmp_port[MAX_STRING_LENGTH];
 
 	tmp_str[0] = 0;
 	if ( (r->flags & FLAG_IPV6_ADDR ) != 0 ) { // IPv6
@@ -924,12 +932,11 @@ char 	icmp_port[MAX_STRING_LENGTH];
 		portchar = ':';
 	}
 	tmp_str[IP_STRING_LEN-1] = 0;
-	ICMP_Port_decode(r, icmp_port);
 
 	if ( long_v6 ) 
-		snprintf(string, MAX_STRING_LENGTH-1, "%s%39s%c%-5s", tag_string, tmp_str, portchar, icmp_port);
+		snprintf(string, MAX_STRING_LENGTH-1, "%s%39s%c%-5s", tag_string, tmp_str, portchar, ICMP_Port_decode(r));
 	else
-		snprintf(string, MAX_STRING_LENGTH-1, "%s%16s%c%-5s", tag_string, tmp_str, portchar, icmp_port);
+		snprintf(string, MAX_STRING_LENGTH-1, "%s%16s%c%-5s", tag_string, tmp_str, portchar, ICMP_Port_decode(r));
 
 	string[MAX_STRING_LENGTH-1] = 0;
 
@@ -1005,10 +1012,8 @@ static void String_SrcPort(master_record_t *r, char *string) {
 } // End of String_SrcPort
 
 static void String_DstPort(master_record_t *r, char *string) {
-char tmp[MAX_STRING_LENGTH];
 
-	ICMP_Port_decode(r, tmp);
-	snprintf(string, MAX_STRING_LENGTH-1 ,"%6s", tmp);
+	snprintf(string, MAX_STRING_LENGTH-1 ,"%6s", ICMP_Port_decode(r));
 	string[MAX_STRING_LENGTH-1] = '\0';
 
 } // End of String_DstPort
@@ -1449,12 +1454,17 @@ static void String_evt(master_record_t *r, char *string) {
 
 } // End of String_evt
 
-
 static void String_xevt(master_record_t *r, char *string) {
 
 	snprintf(string, MAX_STRING_LENGTH-1 ,"%7s", EventXString(r->fw_xevent));
 
 } // End of String_xevt
+
+static void String_sgt(master_record_t *r, char *string) {
+
+	snprintf(string, MAX_STRING_LENGTH-1 ,"%5u", r->sec_group_tag);
+
+} // End of String_sgt
 
 static void String_msec(master_record_t *r, char *string) {
 	unsigned long long etime;

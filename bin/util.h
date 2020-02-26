@@ -47,9 +47,11 @@
 #	include <assert.h>
 #	define dbg_printf(...) printf(__VA_ARGS__)
 #	define dbg_assert(a) assert(a)
+#   define dbg(a) a
 #else
 #	define dbg_printf(...) /* printf(__VA_ARGS__) */
 #	define dbg_assert(a) /* assert(a) */
+#   define dbg(a) /* a */
 #endif
 
 #define UNUSED(expr) do { (void)(expr); } while (0)
@@ -77,6 +79,11 @@ typedef uint32_t	pointer_addr_t;
 #define _1GB (double)(1000.0 * 1000.0 * 1000.0)
 #define _1TB (double)(1000.0 * 1000.0 * 1000.0 * 1000.0)
 
+#define SetFlag(var, flag) 		(var |= flag)
+#define ClearFlag(var, flag) 	(var &= ~flag)
+#define TestFlag(var, flag)		(var & flag)
+
+
 typedef struct stringlist_s {
 	uint32_t	block_size;
 	uint32_t	max_index;
@@ -84,11 +91,12 @@ typedef struct stringlist_s {
 	char		**list;
 } stringlist_t;
 
+
 void xsleep(long sec);
 
 void EndLog(void);
 
-int InitLog(char *name, char *facility);
+int InitLog(int use_syslog, char *name, char *facility, int verbose_log);
 
 void LogError(char *format, ...);
 

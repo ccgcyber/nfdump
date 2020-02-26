@@ -1,6 +1,6 @@
 /*
- *  Copyright (c) 2009 - 2019, Peter Haag
- *  Copyright (c) 2004 - 2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
+ *  Copyright (c) 2009-2020, Peter Haag
+ *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
  *  Redistribution and use in source and binary forms, with or without 
@@ -49,9 +49,8 @@
 #endif
 
 #include "util.h"
-#include "rbtree.h"
-#include "nftree.h"
 #include "nfdump.h"
+#include "nftree.h"
 #include "nffile.h"
 #include "nfx.h"
 #include "nfstat.h"
@@ -114,7 +113,7 @@ static void usage(char *name) {
 static void process_data(profile_channel_info_t *channels, unsigned int num_channels, time_t tslot) {
 common_record_t	*flow_record;
 nffile_t		*nffile;
-FilterEngine_data_t	*engine;
+FilterEngine_t	*engine;
 int 		i, j, done, ret ;
 
 	nffile = GetNextFile(NULL, 0, 0);
@@ -160,11 +159,6 @@ int 		i, j, done, ret ;
 				continue;
 	
 				} break; // not really needed
-		}
-
-		if ( nffile->block_header->id == Large_BLOCK_Type ) {
-			// skip
-			continue;
 		}
 
 		if ( nffile->block_header->id != DATA_BLOCK_TYPE_2 ) {
@@ -278,8 +272,8 @@ int 		i, j, done, ret ;
 						LogError("Failed to add Sampler Record\n");
 					}
 					} break;
-				case ExporterRecordType:
-				case SamplerRecordype:
+				case LegacyRecordType1:
+				case LegacyRecordType2:
 				case ExporterStatRecordType:
 						// Silently skip exporter records
 					break;
@@ -520,7 +514,7 @@ time_t tslot;
 				stdin_profile_params = 1;
 				break;
 			case 'L':
-				if ( !InitLog("nfprofile", optarg) )
+				if ( !InitLog(0, "nfprofile", optarg, 0) )
 					exit(255);
 				break;
 			case 'Z':

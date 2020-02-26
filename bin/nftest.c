@@ -1,7 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -65,19 +63,18 @@
 
 #define ALIGN_BYTES (offsetof (struct { char x; uint64_t y; }, y) - 1)
 
-#include "rbtree.h"
-#include "nfdump.h"
-#include "nftree.h"
-#include "nffile.h"
-#include "nf_common.h"
-#include "nfx.h"
 #include "util.h"
+#include "nfdump.h"
+#include "nffile.h"
+#include "nftree.h"
+#include "filter.h"
+#include "nfx.h"
 
 /* Global Variables */
 extern char 	*CurrentIdent;
 extern extension_descriptor_t extension_descriptor[];
 
-FilterEngine_data_t	*Engine;
+FilterEngine_t *Engine;
 
 /* exported fuctions */
 int check_filter_block(char *filter, master_record_t *flow_record, int expect);
@@ -101,7 +98,7 @@ uint64_t	*block = (uint64_t *)flow_record;
 		printf("Success: Startnode: %i Numblocks: %i Extended: %i Filter: '%s'\n", Engine->StartNode, nblocks(), Engine->Extended, filter);
 	} else {
 		printf("**** FAILED **** Startnode: %i Numblocks: %i Extended: %i Filter: '%s'\n", Engine->StartNode, nblocks(), Engine->Extended, filter);
-		DumpList(Engine);
+		DumpEngine(Engine);
 		printf("Expected: %i, Found: %i\n", expect, ret);
 		printf("Record:\n");
 		for(i=0; i <= (Offset_MR_LAST >> 3); i++) {

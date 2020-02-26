@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2009-2019, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -51,35 +51,28 @@
 #include <stdint.h>
 #endif
 
+#include "util.h"
+#include "nfdump.h"
 #include "nffile.h"
 #include "nfx.h"
+#include "flist.h"
 #include "nfnet.h"
 #include "bookkeeper.h"
 #include "collector.h"
 #include "exporter.h"
-// #include "nf_common.h"
+#include "output_util.h"
 #include "output_raw.h"
 #include "output_pipe.h"
 #include "output_csv.h"
 #include "output_json.h"
 #include "netflow_v5_v7.h"
 #include "netflow_v9.h"
-#include "rbtree.h"
 #include "nftree.h"
 #include "nfprof.h"
-#include "nfdump.h"
 #include "nflowcache.h"
 #include "nfstat.h"
 #include "nfexport.h"
 #include "ipconv.h"
-#include "util.h"
-#include "flist.h"
-
-#ifndef DEVEL
-#   define dbg_printf(...) /* printf(__VA_ARGS__) */
-#else
-#   define dbg_printf(...) printf(__VA_ARGS__)
-#endif
 
 /* hash parameters */
 #define NumPrealloc 128000
@@ -87,7 +80,7 @@
 #define AGGR_SIZE 7
 
 /* Global Variables */
-FilterEngine_data_t	*Engine;
+FilterEngine_t	*Engine;
 
 extern char	*FilterFilename;
 extern uint32_t loopcnt;
@@ -465,12 +458,6 @@ int 				done, write_file;
 				total_bytes += ret;
 		}
 
-		if ( nffile_r->block_header->id == Large_BLOCK_Type ) {
-			// skip
-			printf("Xstat block skipped ...\n");
-			continue;
-		}
-
 		if ( nffile_r->block_header->id != DATA_BLOCK_TYPE_2 ) {
 			if ( nffile_r->block_header->id == DATA_BLOCK_TYPE_1 ) {
 				LogError("nfdump 1.5.x block type 1 no longer supported. Skip block.\n");
@@ -589,9 +576,9 @@ int 				done, write_file;
 							exit(255);
 					}
 					} break;
-				case ExporterRecordType:
-				case SamplerRecordype:
-						// Silently skip exporter records
+				case LegacyRecordType1:
+				case LegacyRecordType2:
+						// Silently skip legacy records
 					break;
 				case ExporterInfoRecordType: {
 					int ret = AddExporterInfo((exporter_info_record_t *)record_ptr);
@@ -845,6 +832,11 @@ char 		Ident[IDENTLEN];
 				break;
 			case 'o':	// output mode
 				print_format = optarg;
+				// limit input chars
+				if ( strlen(print_format) > 512 ) {
+					LogError("Length of ouput format string too big - > 512\n");
+					exit(255);
+				}
 				break;
 			case 'O': {	// stat order by
 				int ret;
@@ -1004,11 +996,6 @@ char 		Ident[IDENTLEN];
 			print_format = DefaultMode;
 	}
 
-	// limit input chars
-	if ( strlen(print_format) > 512 ) {
-		LogError("Length of ouput format string too big - > 512\n");
-		exit(255);
-	}
 	if ( strncasecmp(print_format, "fmt:", 4) == 0 ) {
 		// special user defined output format
 		char *format = &print_format[4];
@@ -1114,7 +1101,7 @@ char 		Ident[IDENTLEN];
 
 	if ( fdump ) {
 		printf("StartNode: %i Engine: %s\n", Engine->StartNode, Engine->Extended ? "Extended" : "Fast");
-		DumpList(Engine);
+		DumpEngine(Engine);
 		exit(0);
 	}
 

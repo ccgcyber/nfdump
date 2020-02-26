@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2009-2019, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -56,12 +56,12 @@
 #include <stdio_ext.h>
 #endif
 
+#include "util.h"
+#include "nfdump.h"
 #include "nffile.h"
 #include "nfx.h"
-#include "nf_common.h"
-#include "rbtree.h"
+#include "flist.h"
 #include "nftree.h"
-#include "nfdump.h"
 #include "nfnet.h"
 #include "bookkeeper.h"
 #include "collector.h"
@@ -69,9 +69,6 @@
 #include "netflow_v5_v7.h"
 #include "netflow_v9.h"
 #include "nfprof.h"
-#include "flist.h"
-#include "util.h"
-#include "grammar.h"
 
 #define DEFAULTCISCOPORT "9995"
 #define DEFAULTHOSTNAME "127.0.0.1"
@@ -84,17 +81,14 @@
 #define	FPURGE	fpurge
 #endif
 
-/* Externals */
-extern int yydebug;
-
 /* Global Variables */
-FilterEngine_data_t	*Engine;
-int 		verbose;
+FilterEngine_t *Engine;
+static int verbose;
 
 /* Local Variables */
 static const char *nfdump_version = VERSION;
 
-send_peer_t peer;
+static send_peer_t peer;
 
 extension_map_list_t *extension_map_list;
 
@@ -117,6 +111,7 @@ static void usage(char *name) {
 		printf("usage %s [options] [\"filter\"]\n"
 					"-h\t\tthis text you see right here\n"
 					"-V\t\tPrint version and exit.\n"
+					"-E\t\tPrint verbose messages. For debugging purpose only.\n"
 					"-H <Host/ip>\tTarget IP address default: 127.0.0.1\n"
 					"-j <mcast>\tSend packets to multicast group\n"
 					"-4\t\tForce IPv4 protocol.\n"
@@ -366,8 +361,8 @@ uint32_t		numflows, cnt;
 					}
 
 					} break;
-				case ExporterRecordType:
-				case SamplerRecordype:
+				case LegacyRecordType1:
+				case LegacyRecordType2:
 				case ExporterInfoRecordType:
 				case ExporterStatRecordType:
 				case SamplerInfoRecordype:
@@ -463,6 +458,9 @@ time_t t_start, t_end;
 			case 'B':
 				blast = 1;
 				break;
+			case 'E':
+				verbose = 1;
+				break;
 			case 'V':
 				printf("%s: Version: %s\n",argv[0], nfdump_version);
 				exit(0);
@@ -489,7 +487,7 @@ time_t t_start, t_end;
 				exit(255);
 				break;
 			case 'L':
-				if ( !InitLog(argv[0], optarg) )
+				if ( !InitLog(0, argv[0], optarg, verbose) )
 					exit(255);
 				break;
 			case 'p':

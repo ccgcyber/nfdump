@@ -1,5 +1,5 @@
 /*  
- *  Copyright (c) 2012-2019, Peter Haag
+ *  Copyright (c) 2012-2020, Peter Haag
  *  All rights reserved.
  *  
  *  Redistribution and use in source and binary forms, with or without 
@@ -46,6 +46,7 @@
 #endif
 
 #include "util.h"
+#include "nfdump.h"
 #include "nffile.h"
 #include "nfx.h"
 #include "nfnet.h"
@@ -284,14 +285,14 @@ static struct cache_s {
 } cache;
 
 // module limited globals
+static int verbose;
+static uint32_t default_sampling;
+static uint32_t overwrite_sampling;
 static uint32_t	processed_records;
 
 // externals
-extern int verbose;
 extern uint32_t Max_num_extensions;
 extern extension_descriptor_t extension_descriptor[];
-extern uint32_t default_sampling;
-extern uint32_t overwrite_sampling;
 
 // prototypes
 static int HasOptionTable(exporterDomain_t *exporter, uint16_t tableID );
@@ -329,8 +330,12 @@ static void Process_ipfix_data(exporterDomain_t *exporter, uint32_t ExportTime, 
 #include "inline.c"
 #include "nffile_inline.c"
 
-int Init_IPFIX(void) {
+int Init_IPFIX(int v, uint32_t sampling, uint32_t overwrite) {
 int i;
+
+	verbose 		   = v;
+	default_sampling   = sampling;
+	overwrite_sampling = overwrite;
 
 	cache.lookup_info	    = (struct element_param_s *)calloc(65536, sizeof(struct element_param_s));
 	cache.common_extensions = (uint32_t *)malloc((Max_num_extensions+1)*sizeof(uint32_t));

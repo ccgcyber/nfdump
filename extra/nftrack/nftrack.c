@@ -1,7 +1,6 @@
 /*
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
- *  Copyright (c) 2004, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
+ *  Copyright (c) 2009-2020, Peter Haag
+ *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
  *  Redistribution and use in source and binary forms, with or without 
@@ -28,12 +27,6 @@
  *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
  *  POSSIBILITY OF SUCH DAMAGE.
  *  
- *  $Author: peter $
- *
- *  $Id: nftrack.c 224 2014-02-16 12:59:29Z peter $
- *
- *  $LastChangedRevision: 224 $
- *	
  */
 
 #include <stdio.h>
@@ -58,15 +51,13 @@
 #include <stdint.h>
 #endif
 
-#include "nf_common.h"
-#include "nffile.h"
-#include "flist.h"
-#include "rbtree.h"
-#include "nftree.h"
-#include "nfdump.h"
-#include "nfx.h"
 #include "util.h"
-#include "grammar.h"
+#include "nfdump.h"
+#include "nffile.h"
+#include "nfx.h"
+#include "exporter.h"
+#include "flist.h"
+#include "nftree.h"
 
 #include "nftrack_stat.h"
 #include "nftrack_rrd.h"
@@ -74,11 +65,8 @@
 // We have 288 slot ( 1 day ) for stat record
 #define AVG_STAT 1
 
-/* Externals */
-extern int yydebug;
-
 /* Global Variables */
-FilterEngine_data_t	*Engine;
+FilterEngine_t *Engine;
 int 		byte_mode, packet_mode;
 uint32_t	byte_limit, packet_limit;	// needed for linking purpose only
 
@@ -229,11 +217,6 @@ uint64_t total_bytes;
                 total_bytes += ret;
         }
 
-		if ( nffile->block_header->id == Large_BLOCK_Type ) {
-			// skip
-			continue;
-		}
-
 		if ( nffile->block_header->id != DATA_BLOCK_TYPE_2 ) {
 			LogError("Can't process block type %u\n", nffile->block_header->id);
 			continue;
@@ -376,7 +359,7 @@ struct tm * t1;
 				AddDB = 1;
 				break;
 			case 'L':
-				if ( !InitLog("nftrack", optarg) )
+				if ( !InitLog(0, "nftrack", optarg, 0) )
 					exit(255);
 				break;
 			case 'S':

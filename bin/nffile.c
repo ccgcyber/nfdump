@@ -1,7 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2011, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -54,21 +52,19 @@
 #include <stdint.h>
 #endif
 
+#include "util.h"
+#include "nfdump.h"
 #include "minilzo.h"
 #include "lz4.h"
-#include "nf_common.h"
-#include "nffile.h"
 #include "flist.h"
-#include "util.h"
+#include "nffile.h"
+#include "nffileV2.h"
 
 /* global vars */
 
 // required for idet filter in nftree.c
 char 	*CurrentIdent;
 
-
-#define READ_FILE	1
-#define WRITE_FILE	1
 
 // LZO params
 #define HEAP_ALLOC(var,size) \
@@ -630,19 +626,6 @@ int i;
 		return NULL;
 	}
 
-/*
-	XXX catalogs not yet implemented
-	nffile->catalog = calloc(1, sizeof(catalog_t));
-	if ( !nffile->catalog ) {
-		LogError("malloc() error in %s line %d: %s\n", __FILE__, __LINE__, strerror(errno) );
-		return NULL;
-	}
-	nffile->catalog->NumRecords = 0;
-	nffile->catalog->size 		= sizeof(catalog_t) - sizeof(data_block_header_t);
-	nffile->catalog->id 		= CATALOG_BLOCK;
-	nffile->catalog->pad 		= 0;
-	nffile->catalog->reserved 	= 0;
-*/
 	// init data buffer
 	nffile->buff_size = 2 * BUFFSIZE;
 	for (i=0; i<NUM_BUFFS; i++ ) {
@@ -739,14 +722,6 @@ int 			fd, flags;
 
 	nffile->file_header->flags 	   = flags;
 
-/*
-	XXX catalogs not yet implemented
-	if ( nffile->catalog && nffile->catalog->NumRecords ) {
-		memset((void *)nffile->catalog->entries, 0, nffile->catalog->NumRecords * sizeof(struct catalog_entry_s));
-		nffile->catalog->NumRecords = 0;
-		nffile->catalog->size		= 0;
-	} 
-*/
 	if ( nffile->stat_record ) {
 		memset((void *)nffile->stat_record, 0, sizeof(stat_record_t));
 		nffile->stat_record->first_seen = 0x7fffffff;
@@ -775,15 +750,6 @@ int 			fd, flags;
 		nffile->fd = 0;
 		return NULL;
 	}
-
-/* skip writing catalog in this test version
-	XXX catalogs not yet implemented
-	if ( WriteExtraBlock(nffile, (data_block_header_t *)nffile->catalog) < 0 ) {
-		LogError("write() error in %s line %d: %s\n", __FILE__, __LINE__, strerror(errno) );
-		close(nffile->fd);
-		return NULL;
-	}
-*/
 
 	return nffile;
 
@@ -1080,11 +1046,21 @@ uint32_t compression;
 	if ( nffile->block_header->size > BUFFSIZE ||
 	     nffile->block_header->size == 0 || nffile->block_header->NumRecords == 0) {
 		// this is most likely a corrupt file
-		LogError("Corrupt data file: Requested buffer size %u exceeds max. buffer size.\n", nffile->block_header->size);
+		LogError("Corrupt data file: Requested buffer size %u exceeds max. buffer size", nffile->block_header->size);
 		return NF_CORRUPT;
 	}
 
+	// check block compression - defaults to file compression setting
+
 	compression = FILE_COMPRESSION(nffile);
+	// block type 1/2 does not honour the compression flag and inherites 
+	// the file compression settings - thes block types are depricated
+	if ( nffile->block_header->id == DATA_BLOCK_TYPE_3 ) {
+		if ( !TestFlag(nffile->block_header->flags, FLAG_BLOCK_COMPRESSED ) )
+			compression = NOT_COMPRESSED;
+		// else block compressed.
+	} 
+
 	ret = read(nffile->fd, nffile->buff_ptr, nffile->block_header->size);
 	if ( ret == nffile->block_header->size ) {
 		// we have the whole record and are done for now
@@ -1206,65 +1182,6 @@ int ret, compression;
 
 } // End of WriteBlock
 
-inline void ExpandRecord_v1(common_record_t *input_record, master_record_t *output_record ) {
-uint32_t	*u;
-size_t		size;
-void		*p = (void *)input_record;
-
-	// Copy common data block
-	size = sizeof(common_record_t) - sizeof(uint8_t[4]);
-	memcpy((void *)output_record, p, size);
-	p = (void *)input_record->data;
-
-	if ( (input_record->flags & FLAG_IPV6_ADDR) != 0 )	{ // IPv6
-		// IPv6
-		// keep compiler happy
-		// memcpy((void *)output_record->V6.srcaddr, p, 4 * sizeof(uint64_t));	
-		memcpy((void *)output_record->ip_union._ip_64.addr, p, 4 * sizeof(uint64_t));	
-		p = (void *)((pointer_addr_t)p + 4 * sizeof(uint64_t));
-	} else { 	
-		// IPv4
-		u = (uint32_t *)p;
-		output_record->V6.srcaddr[0] = 0;
-		output_record->V6.srcaddr[1] = 0;
-		output_record->V4.srcaddr 	 = u[0];
-
-		output_record->V6.dstaddr[0] = 0;
-		output_record->V6.dstaddr[1] = 0;
-		output_record->V4.dstaddr 	 = u[1];
-		p = (void *)((pointer_addr_t)p + 2 * sizeof(uint32_t));
-	}
-
-	// packet counter
-	if ( (input_record->flags & FLAG_PKG_64 ) != 0 ) { 
-		// 64bit packet counter
-		value64_t	l, *v = (value64_t *)p;
-		l.val.val32[0] = v->val.val32[0];
-		l.val.val32[1] = v->val.val32[1];
-		output_record->dPkts = l.val.val64;
-		p = (void *)((pointer_addr_t)p + sizeof(uint64_t));
-	} else {	
-		// 32bit packet counter
-		output_record->dPkts = *((uint32_t *)p);
-		p = (void *)((pointer_addr_t)p + sizeof(uint32_t));
-	}
-
-	// byte counter
-	if ( (input_record->flags & FLAG_BYTES_64 ) != 0 ) { 
-		// 64bit byte counter
-		value64_t	l, *v = (value64_t *)p;
-		l.val.val32[0] = v->val.val32[0];
-		l.val.val32[1] = v->val.val32[1];
-		output_record->dOctets = l.val.val64;
-		p = (void *)((pointer_addr_t)p + sizeof(uint64_t));
-	} else {	
-		// 32bit bytes counter
-		output_record->dOctets = *((uint32_t *)p);
-		p = (void *)((pointer_addr_t)p + sizeof(uint32_t));
-	}
-
-} // End of ExpandRecord_v1
-
 void ModifyCompressFile(char * rfile, char *Rfile, int compress) {
 int 			i, anonymized, compression;
 ssize_t			ret;
@@ -1361,7 +1278,7 @@ char 			*filename, outfile[MAXPATHLEN];
 void QueryFile(char *filename) {
 int i;
 nffile_t	*nffile;
-uint32_t num_records, type1, type2, type3;
+uint32_t num_records, type1, type2;
 struct stat stat_buf;
 ssize_t	ret;
 off_t	fsize;
@@ -1381,7 +1298,6 @@ off_t	fsize;
 	fsize = lseek(nffile->fd, 0, SEEK_CUR);
 	type1 = 0;
 	type2 = 0;
-	type3 = 0;
 	printf("File    : %s\n", filename);
 	printf ("Version : %u - %s\n", nffile->file_header->version,
 		FILE_IS_LZO_COMPRESSED (nffile) ? "lzo compressed" :
@@ -1421,9 +1337,6 @@ off_t	fsize;
 			case DATA_BLOCK_TYPE_2:
 				type2++;
 				break;
-			case Large_BLOCK_Type:
-				type3++;
-				break;
 			default:
 				printf("block %i has unknown type %u\n", i, nffile->block_header->id);
 		}
@@ -1451,7 +1364,6 @@ off_t	fsize;
 
 	printf(" Type 1 : %u\n", type1);
 	printf(" Type 2 : %u\n", type2);
-	printf(" Type 3 : %u\n", type3);
 	printf("Records : %u\n", num_records);
 
 	CloseFile(nffile);

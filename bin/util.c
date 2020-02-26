@@ -41,6 +41,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/select.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
 
 #ifndef SYSLOG_NAMES
@@ -58,16 +59,14 @@
 
 /* Global vars */
 
-extern char *CurrentIdent;
-
-enum { NONE, LESS, MORE };
+static int verbose = 0;
 
 /* Function prototypes */
 static int check_number(char *s, int len);
 
 static int ParseTime(char *s, time_t *t_start);
 
-uint32_t		twin_first, twin_last;
+uint32_t twin_first, twin_last;
 
 static int use_syslog = 0;
 
@@ -119,9 +118,13 @@ void EndLog() {
 		closelog();
 } // End of CloseLog
 
-int InitLog(char *name, char *facility) {
+int InitLog(int use_syslog, char *name, char *facility, int verbose_log) {
 int i;
 char *logname;
+
+	verbose = verbose_log;
+	if ( !use_syslog ) 
+		return 1;
 
 	if ( !facility || strlen(facility) > 32 ) {
 		fprintf(stderr, "Invalid syslog facility name '%s'!\n", facility);
@@ -346,7 +349,7 @@ int ScanTimeFrame(char *tstring, time_t *t_start, time_t *t_end) {
 char *p;
 
 	if ( !tstring ) {
-		fprintf(stderr,"Time Window format error '%s'\n", tstring);
+		fprintf(stderr,"Time Window format error\n");
 		return 0;
 	}
 
@@ -417,13 +420,13 @@ struct tm	*tbuff;
 
 char *UNIX2ISO(time_t t) {
 struct tm	*when;
-static char timestring[16];
+static char timestring[32];
 
 	when = localtime(&t);
 	when->tm_isdst = -1;
-	snprintf(timestring, 15, "%i%02i%02i%02i%02i%02i", 
+	snprintf(timestring, 31, "%4i%02i%02i%02i%02i%02i", 
 		when->tm_year + 1900, when->tm_mon + 1, when->tm_mday, when->tm_hour, when->tm_min, when->tm_sec);
-	timestring[15] = '\0';
+	timestring[31] = '\0';
 
 	return timestring;
 

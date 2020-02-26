@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2009-2019, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -64,16 +64,16 @@
 #endif
 
 #include "util.h"
+#include "nfdump.h"
 #include "nffile.h"
 #include "nfx.h"
-#include "nf_common.h"
+#include "exporter.h"
 #include "nfnet.h"
 #include "flist.h"
 #include "nfstatfile.h"
 #include "bookkeeper.h"
 #include "launch.h"
 #include "collector.h"
-#include "exporter.h"
 #include "netflow_v1.h"
 #include "netflow_v5_v7.h"
 #include "netflow_v9.h"
@@ -97,7 +97,9 @@
 #define SENDSOCK_BUFFSIZE 200000
 
 static void *shmem = NULL;
-int verbose = 0;
+static int verbose = 0;
+static uint32_t default_sampling   = 1;
+static uint32_t overwrite_sampling = 0;
 
 extern uint32_t default_sampling;   // the default sampling rate when nothing else applies. set by -S
 extern uint32_t overwrite_sampling;	// unconditionally overwrite sampling rate with given sampling rate -S
@@ -157,7 +159,7 @@ static void usage(char *name) {
 					"-B bufflen\tSet socket buffer to bufflen bytes\n"
 					"-e\t\tExpire data at each cycle.\n"
 					"-D\t\tFork to background\n"
-					"-E\t\tPrint extended format of netflow data. for debugging purpose only.\n"
+					"-E\t\tPrint extended format of netflow data. For debugging purpose only.\n"
 					"-T\t\tInclude extension tags in records.\n"
 					"-4\t\tListen on IPv4 (default).\n"
 					"-6\t\tListen on IPv6.\n"
@@ -368,7 +370,8 @@ void 		*in_buff;
 int 		err;
 srecord_t	*commbuff;
 
-	if ( !Init_v1() || !Init_v5_v7_input() || !Init_v9() || !Init_IPFIX() )
+	if ( !Init_v1(verbose) || !Init_v5_v7_input(verbose, default_sampling, overwrite_sampling) || 
+		 !Init_v9(verbose, default_sampling, overwrite_sampling) || !Init_IPFIX(verbose, default_sampling, overwrite_sampling) )
 		return;
 
 	in_buff  = malloc(NETWORK_INPUT_BUFF_SIZE);
@@ -457,7 +460,7 @@ srecord_t	*commbuff;
 
 		if ( ((t_now - t_start) >= twin) || done ) {
 			struct  tm *now;
-			char	*subdir, fmt[24];
+			char	*subdir, fmt[MAXTIMESTRING];
 
 			alarm(0);
 			now = localtime(&t_start);
@@ -580,9 +583,10 @@ srecord_t	*commbuff;
 			if ( launcher_pid ) {
 				// Signal launcher
 
-				strncpy(commbuff->tstring, fmt, MAXTIMESTRING-1);
-				commbuff->tstamp = t_start;
+				strncpy(commbuff->tstring, fmt, MAXTIMESTRING);
+				commbuff->tstring[MAXTIMESTRING-1] = '\0';
 
+				commbuff->tstamp = t_start;
 				if ( subdir ) {
 					snprintf(commbuff->fname, MAXPATHLEN-1, "%s/nfcapd.%s", subdir, fmt);
 				} else {
@@ -876,7 +880,12 @@ char	*pcap_file = NULL;
 						exit(255);
 					}
 					tmp[MAXPATHLEN-1] = 0;
-					snprintf(pidfile, MAXPATHLEN - 1 - strlen(tmp), "%s/%s", tmp, optarg);
+					if ( (strlen(tmp) + strlen(optarg) + 3) < MAXPATHLEN ) {
+						snprintf(pidfile, MAXPATHLEN - 3 - strlen(tmp), "%s/%s", tmp, optarg);
+					} else {
+						fprintf(stderr, "pidfile MAXPATHLEN error:\n");
+						exit(255);
+					}
 				}
 				// pidfile now absolute path
 				pidfile[MAXPATHLEN-1] = 0;
@@ -1015,7 +1024,7 @@ char	*pcap_file = NULL;
 		exit(255);
 	}
 
-	if ( do_daemonize && !InitLog(argv[0], SYSLOG_FACILITY)) {
+	if ( !InitLog(do_daemonize, argv[0], SYSLOG_FACILITY, verbose) ) {
 		exit(255);
 	}
 

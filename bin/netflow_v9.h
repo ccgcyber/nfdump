@@ -1,7 +1,5 @@
 /*
- *  Copyright (c) 2017, Peter Haag
- *  Copyright (c) 2014, Peter Haag
- *  Copyright (c) 2009, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -297,6 +295,9 @@ typedef struct common_header_s {
 #define NF_F_INITIATORPACKETS		298
 #define NF_F_RESPONDERPACKETS		299
 
+// Zone-Based Firewall Logging
+#define NF_FW_CTS_SRC_SGT			34000
+
 // Cisco ASR 1000 series NEL extension - Nat Event Logging
 #define NF_N_NAT_EVENT				230
 #define NF_N_INGRESS_VRFID			234
@@ -316,7 +317,7 @@ typedef struct common_header_s {
 #define NF9_NPROBE_APPL_LATENCY_USEC	57559
 
 /* prototypes */
-int Init_v9(void);
+int Init_v9(int v, uint32_t sampling, uint32_t overwrite);
 
 void Process_v9(void *in_buff, ssize_t in_buff_cnt, FlowSource_t *fs);
 

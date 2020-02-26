@@ -1,6 +1,6 @@
 /*
- *  Copyright (c) 2009 - 2018, Peter Haag
- *  Copyright (c) 2004 - 2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
+ *  Copyright (c) 2009-2020, Peter Haag
+ *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
  *  Redistribution and use in source and binary forms, with or without 
@@ -50,7 +50,6 @@
 
 #include <rrd.h>
 
-#include "nf_common.h"
 #include "rbtree.h"
 #include "nfdump.h"
 #include "nffile.h"
@@ -74,7 +73,7 @@ extern char Ident[IDENTLEN];
 static profile_channel_info_t *profile_channels;
 static unsigned int num_channels;
 
-static inline int AppendString(char *stack, char *string, size_t	*buff_size);
+static int AppendString(char *stack, char *string, size_t	*buff_size);
 
 static void SetupProfileChannels(char *profile_datadir, char *profile_statdir, profile_param_info_t *profile_param, 
 	int subdir_index, char *filterfile, char *filename, int verify_only, int compress);
@@ -83,7 +82,7 @@ profile_channel_info_t	*GetChannelInfoList(void) {
 	return profile_channels;
 } // End of GetProfiles
 
-static inline int AppendString(char *stack, char *string, size_t *buff_size) {
+static int AppendString(char *stack, char *string, size_t *buff_size) {
 size_t len = strlen(string);
 
 	if ( *buff_size <= len ) {
@@ -91,7 +90,7 @@ size_t len = strlen(string);
 		return 0;
 	}
 
-	strncat(stack, string, len);
+	strncat(stack, string, *buff_size );
 	*buff_size -= len;
 
 	return 1;
@@ -119,7 +118,7 @@ profile_param_info_t	*profile_param;
 
 static void SetupProfileChannels(char *profile_datadir, char *profile_statdir, profile_param_info_t *profile_param, 
 	int subdir_index, char *filterfile, char *filename, int verify_only, int compress ) {
-FilterEngine_data_t	*engine;
+FilterEngine_t *engine;
 struct 	stat stat_buf;
 char 	*p, *filter, *subdir, *wfile, *ofile, *rrdfile, *source_filter;
 char	path[MAXPATHLEN];
@@ -211,7 +210,7 @@ nffile_t *nffile;
 		return;
 	}
 
-	strncpy(filter, source_filter, strlen(source_filter));
+	strncpy(filter, source_filter, strlen(filter));
 	p = filter + strlen(source_filter);
 
 	ret = read(ffd, (void *)p, stat_buf.st_size);

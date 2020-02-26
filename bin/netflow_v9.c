@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2009-2019, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -47,6 +47,7 @@
 #endif
 
 #include "util.h"
+#include "nfdump.h"
 #include "nffile.h"
 #include "nfx.h"
 #include "nfnet.h"
@@ -68,11 +69,12 @@
 
 #include "inline.c"
 
-extern int verbose;
 extern extension_descriptor_t extension_descriptor[];
 extern uint32_t Max_num_extensions;
-extern uint32_t default_sampling;
-extern uint32_t overwrite_sampling;
+
+static int verbose;
+static uint32_t default_sampling;
+static uint32_t overwrite_sampling;
 
 typedef struct sequence_map_s {
 /* sequence definition:
@@ -303,6 +305,9 @@ static struct v9_element_map_s {
 	{ NF_F_ICMP_CODE, 			"FNF ICMP code",			_1byte, _1byte,  move8,  zero8,  EX_NSEL_COMMON },
 	{ NF_F_ICMP_TYPE_IPV6, 		"ASA ICMP type V6",			_1byte, _1byte,  move8,  zero8,  EX_NSEL_COMMON },
 	{ NF_F_ICMP_CODE_IPV6, 		"ASA ICMP code V6",			_1byte, _1byte,  move8,  zero8,  EX_NSEL_COMMON },
+	// zone base firewall
+	{ NF_FW_CTS_SRC_SGT, 		"Source security group tag", _2bytes, _2bytes, move16, 	zero16, EX_NSEL_COMMON },
+
 	// XlATE extensions
 	{ NF_F_XLATE_SRC_ADDR_IPV4, "ASA V4 xsrc addr",			_4bytes,  _4bytes,  move32,  zero32,  EX_NSEL_XLATE_IP_v4 },
 	{ NF_F_XLATE_DST_ADDR_IPV4, "ASA V4 xdst addr",			_4bytes,  _4bytes,  move32,  zero32,  EX_NSEL_XLATE_IP_v4 },
@@ -433,9 +438,12 @@ static netflow_v9_header_t	*v9_output_header;
 
 #include "nffile_inline.c"
 
-int Init_v9(void) {
+int Init_v9(int v, uint32_t sampling, uint32_t overwrite) {
 int i;
 
+	verbose 		   = v;
+	default_sampling   = sampling;
+	overwrite_sampling = overwrite;
 	output_templates = NULL;
 
 	cache.lookup_info	    = (struct element_param_s *)calloc(65536, sizeof(struct element_param_s));
@@ -1033,7 +1041,7 @@ size_t				size_required;
 					PushSequence( table, NF_F_FW_EVENT, &offset, NULL, 0);
 				offset += 1;
 				PushSequence( table, NF_F_FW_EXT_EVENT, &offset, NULL, 0);
-				offset += 2;
+				PushSequence( table, NF_FW_CTS_SRC_SGT, &offset, NULL, 0);
 				break;
 			case EX_NSEL_XLATE_PORTS:
 				if ( cache.lookup_info[NF_F_XLATE_SRC_ADDR_84].found ) {
