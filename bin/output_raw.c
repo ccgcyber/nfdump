@@ -115,11 +115,33 @@ extension_map_t	*extension_map = r->map_ref;
 	ts = localtime(&when);
 	strftime(datestr2, 63, "%Y-%m-%d %H:%M:%S", ts);
 
+	char *type;
+	char version[8];
+	if ( TestFlag(r->flags, FLAG_EVENT) ) {
+		type = "EVENT";
+		version[0] = '\0';
+	} else {
+		if ( r->nfversion != 0 ) {
+			snprintf(version, 8, " v%u", r->nfversion & 0x0F);
+			if ( r->nfversion & 0x80 ) {
+				type = "SFLOW";
+			} else if ( r->nfversion & 0x40 ) {
+				type = "PCAP";
+			} else {
+				type = "NETFLOW";
+			}
+		} else {
+			// compat with previous versions
+			type = "FLOW";
+			version[0] = '\0';
+		}
+	}
+
 	_s = data_string;
 	slen = STRINGSIZE;
 	snprintf(_s, slen-1, "\n"
 "Flow Record: \n"
-"  Flags        =              0x%.2x %s, %s\n"
+"  Flags        =              0x%.2x %s%s, %s\n"
 "  label        =  %16s\n"
 "  export sysid =             %5u\n"
 "  size         =             %5u\n"
@@ -130,7 +152,7 @@ extension_map_t	*extension_map = r->map_ref;
 "  src addr     =  %16s\n"
 "  dst addr     =  %16s\n"
 , 
-		r->flags, TestFlag(r->flags, FLAG_EVENT) ? "EVENT" : "FLOW", 
+		r->flags, type, version,
 		TestFlag(r->flags, FLAG_SAMPLED) ? "Sampled" : "Unsampled", 
 		r->label ? r->label : "<none>",
 		r->exporter_sysid, r->size, r->first, 
@@ -163,7 +185,7 @@ extension_map_t	*extension_map = r->map_ref;
 "  (src)tos     =               %3u\n"
 "  (in)packets  =        %10llu\n"
 "  (in)bytes    =        %10llu\n",
-	r->fwd_status, r->tcp_flags, FlagsString(r->tcp_flags), r->prot, ProtoString(r->prot), r->tos,
+	r->fwd_status, r->tcp_flags, FlagsString(r->tcp_flags), r->prot, ProtoString(r->prot, 0), r->tos,
 		(unsigned long long)r->dPkts, (unsigned long long)r->dOctets);
 
 	_slen = strlen(data_string);

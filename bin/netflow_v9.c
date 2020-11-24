@@ -1455,14 +1455,23 @@ samplerOption_t *samplerOption;
 				samplerOption->interval.offset = offset;
 				SetFlag(samplerOption->flags, SAMPLER305);
 				break;
+			case 95:
+				dbg_printf("Option template: Application ID found\n");
+				break;
+			case 96:
+				dbg_printf("Option template: Application Name found\n");
+				break;
+			case 94:
+				dbg_printf("Option template: Application Desc found\n");
+				break;
 		}
 		offset += length;
 	}
 
-	if ( (samplerOption->flags & SAMPLERMASK ) == SAMPLERFLAGS) {
+	if ( (samplerOption->flags & SAMPLERMASK ) != 0) {
 		dbg_printf("[%u] Sampler information found\n", exporter->info.id);
 		InsertSamplerOption(exporter, samplerOption);
-	} else if ( (samplerOption->flags & STDMASK ) == STDFLAGS) {
+	} else if ( (samplerOption->flags & STDMASK ) != 0) {
 		dbg_printf("[%u] Std sampling information found\n", exporter->info.id);
 		InsertSamplerOption(exporter, samplerOption);
 	} else {
@@ -1584,6 +1593,7 @@ char				*string;
 		data_record->type  		    = CommonRecordType;
 	  	data_record->ext_map	    = table->extension_info.map->map_id;
 		data_record->exporter_sysid = exporter->info.sysid;
+	  	data_record->nfversion		= 9;
 		data_record->reserved 		= 0;
 
 		table->packets 		  	    = 0;

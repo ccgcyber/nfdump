@@ -131,7 +131,7 @@ typedef struct input_translation_s {
 	int			delta_time;				// delta micro or absolute ms time stamps
 	uint64_t	flow_start;				// start time in msec
 	uint64_t	flow_end;				// end time in msec
-	uint32_t	icmpTypeCodeIPv4;		// ICMP type/code in data stream
+	uint32_t	icmpTypeCode;			// ICMP type/code in data stream
 	uint64_t    packets;				// total (in)packets - sampling corrected
 	uint64_t    bytes;					// total (in)bytes - sampling corrected
 	uint64_t    out_packets;			// total out packets - sampling corrected
@@ -237,6 +237,7 @@ static struct ipfix_element_map_s {
 	{ IPFIX_SourceIPv6PrefixLength, 	 _1byte, 	_1byte,   move8, zero8, EX_MULIPLE },
 	{ IPFIX_DestinationIPv6PrefixLength, _1byte, 	_1byte,   move8, zero8, EX_MULIPLE },
 	{ IPFIX_icmpTypeCodeIPv4, 			 _2bytes, 	_2bytes,  saveICMP, nop, COMMON_BLOCK },
+	{ IPFIX_icmpTypeCodeIPv6, 			 _2bytes, 	_2bytes,  saveICMP, nop, COMMON_BLOCK },
 	{ IPFIX_postIpClassOfService, 		 _1byte, 	_1byte,   move8, zero8, EX_MULIPLE },
 	{ IPFIX_SourceMacAddress, 			 _6bytes, 	_8bytes,  move_mac, zero64, EX_MAC_1},
 	{ IPFIX_postDestinationMacAddress, 	 _6bytes,	_8bytes,  move_mac, zero64, EX_MAC_1},
@@ -423,8 +424,8 @@ uint32_t ObservationDomain = ntohl(ipfix_header->ObservationDomain);
 
 	FlushInfoExporter(fs, &((*e)->info));
 
-	dbg_printf("[%u] New exporter: SysID: %u, Observation domain %u from: %s\n", 
-		ObservationDomain, (*e)->info.sysid, ObservationDomain, ipstr);
+	dbg_printf("[%u] New exporter: SysID: %u, Observation domain %u from: %s:%u\n", 
+		ObservationDomain, (*e)->info.sysid, ObservationDomain, ipstr, fs->port);
 	LogInfo("Process_ipfix: New exporter: SysID: %u, Observation domain %u from: %s\n", 
 		(*e)->info.sysid, ObservationDomain, ipstr);
 
@@ -839,7 +840,7 @@ size_t				size_required;
 	SetFlag(table->flags, FLAG_PKG_64);
 	SetFlag(table->flags, FLAG_BYTES_64);
 	table->delta_time		= 0;
-	table->icmpTypeCodeIPv4	= 0;
+	table->icmpTypeCode		= 0;
 	table->router_ip_offset = 0;
 	table->received_offset  = 0;
 
@@ -1079,7 +1080,10 @@ size_t				size_required;
 	// for netflow historical reason, ICMP type/code goes into dst port field
 	// remember offset, for decoding
 	if ( cache.lookup_info[IPFIX_icmpTypeCodeIPv4].found && cache.lookup_info[IPFIX_icmpTypeCodeIPv4].length == 2 ) {
-		PushSequence( table, IPFIX_icmpTypeCodeIPv4, NULL, &table->icmpTypeCodeIPv4);
+		PushSequence( table, IPFIX_icmpTypeCodeIPv4, NULL, &table->icmpTypeCode);
+	}
+	if ( cache.lookup_info[IPFIX_icmpTypeCodeIPv6].found && cache.lookup_info[IPFIX_icmpTypeCodeIPv6].length == 2 ) {
+		PushSequence( table, IPFIX_icmpTypeCodeIPv6, NULL, &table->icmpTypeCode);
 	}
 
 #ifdef DEVEL
@@ -1599,6 +1603,7 @@ samplerOption_t *samplerOption;
 				samplerOption->interval.length = length;
 				samplerOption->interval.offset = offset;
 				SetFlag(samplerOption->flags, STDSAMPLING34);
+				dbg_printf("Std Sampling found. length: %u, offset: %u\n", length, offset);
 				break;
 			case IPFIX_samplingAlgorithm: // #35
 				samplerOption->mode.length = length;
@@ -1629,10 +1634,10 @@ samplerOption_t *samplerOption;
 		offset += length;
 	}
 
-	if ( (samplerOption->flags & SAMPLERMASK ) == SAMPLERFLAGS) {
+	if ( (samplerOption->flags & SAMPLERMASK ) != 0) {
 		dbg_printf("[%u] Sampler information found\n", exporter->info.id);
 		InsertSamplerOption(exporter, samplerOption);
-	} else if ( (samplerOption->flags & STDMASK ) == STDFLAGS) {
+	} else if ( (samplerOption->flags & STDMASK ) != 0) {
 		dbg_printf("[%u] Std sampling information found\n", exporter->info.id);
 		InsertSamplerOption(exporter, samplerOption);
 	} else {
@@ -1715,6 +1720,7 @@ char				*string;
 		data_record->type  		    = CommonRecordType;
 	  	data_record->ext_map	    = table->extension_info.map->map_id;
 		data_record->exporter_sysid = exporter->info.sysid;
+		data_record->nfversion		= 10;
 		data_record->reserved 		= 0;
 
 		table->flow_start 		    = 0;
@@ -1884,9 +1890,9 @@ char				*string;
 
 		// for netflow historical reason, ICMP type/code goes into dst port field
 		if ( data_record->prot == IPPROTO_ICMP || data_record->prot == IPPROTO_ICMPV6 ) {
-			if ( table->icmpTypeCodeIPv4 ) {
+			if ( table->icmpTypeCode ) {
 				data_record->srcport = 0;
-				data_record->dstport = table->icmpTypeCodeIPv4;
+				data_record->dstport = table->icmpTypeCode;
 				// data_record->dstport = Get_val16((void *)&in[table->ICMP_offset]);
 			}
 		}
@@ -2034,7 +2040,7 @@ uint8_t	 *in;
 	// map input buffer as a byte array
 	in	= (uint8_t *)(data_flowset + 4);  // skip flowset header
 
-	if ( (samplerOption->flags & SAMPLERMASK ) == SAMPLERFLAGS) {
+	if ( (samplerOption->flags & SAMPLERMASK ) != 0) {
 		int32_t  id;
 		uint16_t mode;
 		uint32_t interval;
@@ -2051,7 +2057,7 @@ uint8_t	 *in;
 		dbg_printf("Sampler interval: %u\n", interval);
 	}
 
-	if ( (samplerOption->flags & STDMASK ) == STDFLAGS) {
+	if ( (samplerOption->flags & STDMASK ) != 0) {
 		int32_t  id;
 		uint16_t mode;
 		uint32_t interval;

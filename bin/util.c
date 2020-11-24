@@ -118,12 +118,12 @@ void EndLog() {
 		closelog();
 } // End of CloseLog
 
-int InitLog(int use_syslog, char *name, char *facility, int verbose_log) {
+int InitLog(int want_syslog, char *name, char *facility, int verbose_log) {
 int i;
 char *logname;
 
 	verbose = verbose_log;
-	if ( !use_syslog ) 
+	if ( !want_syslog ) 
 		return 1;
 
 	if ( !facility || strlen(facility) > 32 ) {
@@ -536,10 +536,10 @@ void InsertString(stringlist_t *list, char *string) {
 
 } // End of InsertString
 
-void format_number(uint64_t num, char *s, int scale, int fixed_width) {
+void format_number(uint64_t num, char *s, int printPlain, int fixed_width) {
 double f = num;
 
-	if ( !scale ) {
+	if ( printPlain ) {
 		snprintf(s, 31, "%llu", (long long unsigned)num);
 	} else {
 

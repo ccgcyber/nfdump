@@ -298,13 +298,20 @@ void *p;
 	flow_record.flags	 = 2;
 	ret = check_filter_block("ipv4", &flow_record, 1);
 	ret = check_filter_block("ipv6", &flow_record, 0);
-	flow_record.flags	 = 1;
+	flow_record.flags	 = 0xFF;
 	ret = check_filter_block("ipv4", &flow_record, 0);
 	ret = check_filter_block("ipv6", &flow_record, 1);
 	flow_record.flags	 = 7;
 	ret = check_filter_block("ipv4", &flow_record, 0);
 	ret = check_filter_block("ipv6", &flow_record, 1);
 
+	flow_record.nfversion = 5;
+	ret = check_filter_block("nfversion 5", &flow_record, 1);
+	ret = check_filter_block("nfversion 9", &flow_record, 0);
+	flow_record.nfversion = 9;
+	ret = check_filter_block("nfversion > 5", &flow_record, 1);
+	ret = check_filter_block("nfversion 9", &flow_record, 1);
+	ret = check_filter_block("nfversion 10", &flow_record, 0);
 
 	flow_record.prot = IPPROTO_TCP;
 	ret = check_filter_block("any", &flow_record, 1);
@@ -911,6 +918,7 @@ void *p;
 	ret = check_filter_block("fwdstat noroute", &flow_record, 0); 
 
 	flow_record.dir = 1;
+	ret = check_filter_block("dir 1", &flow_record, 1); 
 	ret = check_filter_block("flowdir 1", &flow_record, 1); 
 	ret = check_filter_block("flowdir 0", &flow_record, 0); 
 	ret = check_filter_block("flowdir egress", &flow_record, 1); 
@@ -1172,7 +1180,7 @@ void *p;
 	flow_record.dstport = 1111;
 	ret = check_filter_block("dst port in pblock", &flow_record, 1);
 	ret = check_filter_block("port in pblock", &flow_record, 1);
-exit(0);
+
 
 	flow_record.dstport = 2222;
 	ret = check_filter_block("dst port in pblock", &flow_record, 1);
@@ -1183,7 +1191,7 @@ exit(0);
 	ret = check_filter_block("port in pblock", &flow_record, 0);
 
 	flow_record.srcport = 1234;
-	flow_record.srcport = 2134;
+	flow_record.dstport = 2134;
 	ret = check_filter_block("src port in pblock", &flow_record, 1);
 	ret = check_filter_block("dst port in pblock", &flow_record, 1);
 	ret = check_filter_block("port in pblock", &flow_record, 1);
@@ -1217,6 +1225,12 @@ exit(0);
 	ret = check_filter_block("nip 10.10.10.11", &flow_record, 1);
 	ret = check_filter_block("nip 172.32.7.15", &flow_record, 0);
 	ret = check_filter_block("nip 10.10.10.12", &flow_record, 0);
+	ret = check_filter_block("src nip in [ 172.32.7.16] ", &flow_record, 1);
+	ret = check_filter_block("src nip in [ 172.32.7.15] ", &flow_record, 0);
+	ret = check_filter_block("dst nip in [ 10.10.10.11] ", &flow_record, 1);
+	ret = check_filter_block("dst nip in [ 10.10.10.12] ", &flow_record, 0);
+	ret = check_filter_block("nip in [ 10.10.10.11] ", &flow_record, 1);
+	ret = check_filter_block("nip in [ 172.32.7.16] ", &flow_record, 1);
 
 	inet_pton(PF_INET6, "fe80::2110:abcd:1235:ffff", flow_record.xlate_src_ip.V6);
 	flow_record.xlate_src_ip.V6[0] = ntohll(flow_record.xlate_src_ip.V6[0]);

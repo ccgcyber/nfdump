@@ -3,7 +3,7 @@
 
 AC_PREREQ(2.59)
 AC_REVISION($Revision: 244 $)dnl 
-AC_INIT(nfdump, 1.6.19, peter@people.ops-trust.net)
+AC_INIT(nfdump, 1.6.22, peter@people.ops-trust.net)
 
 AC_CONFIG_HEADER([config.h])
 AM_INIT_AUTOMAKE([subdir-objects])
@@ -147,7 +147,7 @@ AC_SUBST(RRD_LIBS)
 	else
 		AC_MSG_ERROR(Required rrd.h header file not found!)
 	fi
-	AC_RUN_IFELSE(
+	AC_COMPILE_IFELSE(
 		[ AC_LANG_PROGRAM(
 			[[
 				#include <stdio.h>
@@ -202,7 +202,7 @@ AC_SUBST(RRD_LIBS)
 	else
 		AC_MSG_ERROR(Required rrd.h header file not found!)
 	fi
-	AC_RUN_IFELSE(
+	AC_COMPILE_IFELSE(
 		[ AC_LANG_PROGRAM(
 			[[
 				#include <stdio.h>
@@ -243,7 +243,7 @@ AC_SUBST(PCAP_LIBS)
 	else
 		AC_MSG_ERROR(Required pcap.h header file not found!)
 	fi
-	AC_RUN_IFELSE(
+	AC_COMPILE_IFELSE(
 		[ AC_LANG_PROGRAM(
 			[[
 				#include <stdio.h>

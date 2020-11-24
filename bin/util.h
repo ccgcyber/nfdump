@@ -96,7 +96,7 @@ void xsleep(long sec);
 
 void EndLog(void);
 
-int InitLog(int use_syslog, char *name, char *facility, int verbose_log);
+int InitLog(int want_syslog, char *name, char *facility, int verbose_log);
 
 void LogError(char *format, ...);
 
@@ -115,11 +115,9 @@ char *UNIX2ISO(time_t t);
 time_t ISO2UNIX(char *timestring);
 
 #define NUMBER_STRING_SIZE	32
-#define DONT_SCALE_NUMBER 0
-#define DO_SCALE_NUMBER   1
 #define FIXED_WIDTH 	  1
 #define VAR_LENGTH  	  0
-void format_number(uint64_t num, char *s, int scale, int fixed_width);
+void format_number(uint64_t num, char *s, int printPlain, int fixed_width);
 
 void SetupInputFileSequence(char *multiple_dirs, char *single_file, char *multiple_files);
 

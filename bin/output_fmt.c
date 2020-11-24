@@ -72,7 +72,7 @@ static int	format_index		= 0;
 
 static int		do_tag 		 = 0;
 static int 		long_v6 	 = 0;
-static int		scale	 	 = 1;
+static int		printPlain	 = 0;
 static double	duration;
 
 #define STRINGSIZE 10240
@@ -94,6 +94,8 @@ static void AddToken(int index);
 static void AddString(char *string);
 
 static void String_FlowFlags(master_record_t *r, char *string);
+
+static void String_Version(master_record_t *r, char *string);
 
 static void String_FirstSeen(master_record_t *r, char *string);
 
@@ -279,6 +281,7 @@ static struct format_token_list_s {
 	string_function_t	string_function;	// function generation output string
 } format_token_list[] = {
 	{ "%ff", 0, "Flow Flags", 				String_FlowFlags }, 	// flow flags in hex
+	{ "%nfv", 0, "Ver", 					String_Version }, 		// netflow version
 	{ "%tfs", 0, "Date first seen        ", String_FirstSeen },		// Start Time - first seen
 	{ "%ts",  0, "Date first seen        ", String_FirstSeen },		// Start Time - first seen
 	{ "%tsr",  0, "Date first seen (raw)    ", String_FirstSeenRaw },		// Start Time - first seen, seconds
@@ -538,7 +541,7 @@ int ParseOutputFormat(char *format, int plain_numbers, printmap_t *printmap) {
 char *c, *s, *h;
 int	i, remaining;
 
-	scale = plain_numbers == 0;
+	printPlain = plain_numbers;
 
 	InitFormatParser();
 	
@@ -638,7 +641,32 @@ static void String_FlowFlags(master_record_t *r, char *string) {
 	string[MAX_STRING_LENGTH-1] = '\0';
 
 } // End of String_FlowFlags
- 
+
+static void String_Version(master_record_t *r, char *string) {
+
+	char *type;
+	if ( TestFlag(r->flags, FLAG_EVENT) ) {
+		type = "EVT";
+		snprintf(string, MAX_STRING_LENGTH-1, "%s%u", type, r->nfversion);
+	} else {
+		if ( r->nfversion != 0 ) {
+			if ( r->nfversion & 0x80 ) {
+				type = "Sv";
+			} else if ( r->nfversion & 0x40 ) {
+				type = "Pv";
+			} else {
+				type = "Nv";
+			}
+			snprintf(string, MAX_STRING_LENGTH-1, "%s%u", type, r->nfversion & 0x0F);
+		} else {
+			// compat with previous versions
+			type = "FLO";
+			snprintf(string, MAX_STRING_LENGTH-1, "%s", type);
+		}
+	}
+
+} // End of String_Version
+
 static void String_FirstSeen(master_record_t *r, char *string) {
 time_t 	tt;
 struct tm * ts;
@@ -728,7 +756,7 @@ static void String_Duration(master_record_t *r, char *string) {
 
 static void String_Protocol(master_record_t *r, char *string) {
 
-	snprintf(string, MAX_STRING_LENGTH-1 ,"%-5s", ProtoString(r->prot));
+	snprintf(string, MAX_STRING_LENGTH-1 ,"%-5s", ProtoString(r->prot, printPlain));
 	string[MAX_STRING_LENGTH-1] = '\0';
 
 } // End of String_Protocol
@@ -1081,7 +1109,7 @@ static void String_Output(master_record_t *r, char *string) {
 static void String_InPackets(master_record_t *r, char *string) {
 char s[NUMBER_STRING_SIZE];
 
-	format_number(r->dPkts, s, scale, FIXED_WIDTH);
+	format_number(r->dPkts, s, printPlain, FIXED_WIDTH);
 	snprintf(string, MAX_STRING_LENGTH-1 ,"%8s", s);
 	string[MAX_STRING_LENGTH-1] = '\0';
 
@@ -1090,7 +1118,7 @@ char s[NUMBER_STRING_SIZE];
 static void String_OutPackets(master_record_t *r, char *string) {
 char s[NUMBER_STRING_SIZE];
 
-	format_number(r->out_pkts, s, scale, FIXED_WIDTH);
+	format_number(r->out_pkts, s, printPlain, FIXED_WIDTH);
 	snprintf(string, MAX_STRING_LENGTH-1 ,"%8s", s);
 	string[MAX_STRING_LENGTH-1] = '\0';
 
@@ -1099,7 +1127,7 @@ char s[NUMBER_STRING_SIZE];
 static void String_InBytes(master_record_t *r, char *string) {
 char s[NUMBER_STRING_SIZE];
 
-	format_number(r->dOctets, s, scale, FIXED_WIDTH);
+	format_number(r->dOctets, s, printPlain, FIXED_WIDTH);
 	snprintf(string, MAX_STRING_LENGTH-1 ,"%8s", s);
 	string[MAX_STRING_LENGTH-1] = '\0';
 
@@ -1108,7 +1136,7 @@ char s[NUMBER_STRING_SIZE];
 static void String_OutBytes(master_record_t *r, char *string) {
 char s[NUMBER_STRING_SIZE];
 
-	format_number(r->out_bytes, s, scale, FIXED_WIDTH);
+	format_number(r->out_bytes, s, printPlain, FIXED_WIDTH);
 	snprintf(string, MAX_STRING_LENGTH-1 ,"%8s", s);
 	string[MAX_STRING_LENGTH-1] = '\0';
 
@@ -1392,7 +1420,7 @@ char s[NUMBER_STRING_SIZE];
 	} else {
 		bps = 0;
 	}
-	format_number(bps, s, scale, FIXED_WIDTH);
+	format_number(bps, s, printPlain, FIXED_WIDTH);
 	snprintf(string, MAX_STRING_LENGTH-1 ,"%8s", s);
 	string[MAX_STRING_LENGTH-1] = '\0';
 
@@ -1407,7 +1435,7 @@ char s[NUMBER_STRING_SIZE];
 	} else {
 		pps = 0;
 	}
-	format_number(pps, s, scale, FIXED_WIDTH);
+	format_number(pps, s, printPlain, FIXED_WIDTH);
 	snprintf(string, MAX_STRING_LENGTH-1 ,"%8s", s);
 	string[MAX_STRING_LENGTH-1] = '\0';
 

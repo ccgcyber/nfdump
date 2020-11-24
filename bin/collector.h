@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2009-2019, Peter Haag
+ *  Copyright (c) 2009-2020, Peter Haag
  *  Copyright (c) 2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
  *  All rights reserved.
  *  
@@ -39,6 +39,7 @@
 #include <stdint.h>
 #endif
 #include <sys/socket.h>
+#include <netinet/in.h>
 
 #include "exporter.h"
 #include "bookkeeper.h"
@@ -60,6 +61,7 @@ typedef struct FlowSource_s {
 	char 				Ident[IDENTLEN];
 	ip_addr_t			ip;
 	uint32_t			sa_family;
+	in_port_t			port;
 
 	int					any_source;
 	bookkeeper_t 		*bookkeeper;
@@ -95,6 +97,8 @@ typedef struct FlowSource_s {
 
 // prototypes
 int AddFlowSource(FlowSource_t **FlowSource, char *ident);
+
+int AddFlowSourceFromFile(FlowSource_t **FlowSource, char *path);
 
 int AddDefaultFlowSource(FlowSource_t **FlowSource, char *ident, char *path);
 

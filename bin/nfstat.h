@@ -70,9 +70,6 @@ typedef struct StatRecord {
 	uint32_t	last;
 	uint16_t	msec_first;
 	uint16_t	msec_last;
-	uint8_t		record_flags;
-	uint8_t		tcp_flags;
-	uint8_t		tos;
 	// key 
 	uint8_t		prot;
 	uint64_t	stat_key[2];
@@ -101,8 +98,19 @@ typedef struct SortElement {
     uint64_t	count;
 } SortElement_t;
 
+#define ASCENDING 1
+#define DESCENDING 0
+
 #define MULTIPLE_LIST_ORDERS 1
 #define SINGLE_LIST_ORDER    0
+
+#define NeedSwap(GuessDir, r) ( GuessDir && \
+	((r)->prot == IPPROTO_TCP || (r)->prot == IPPROTO_UDP) && \
+	 ((((r)->srcport < 1024) && ((r)->dstport >= 1024)) || \
+	  (((r)->srcport < 32768) && ((r)->dstport >= 32768)) || \
+	  (((r)->srcport < 49152) && ((r)->dstport >= 49152)) \
+	 ) \
+	)
 
 /* Function prototypes */
 void SetLimits(int stat, char *packet_limit_string, char *byte_limit_string );
@@ -117,13 +125,10 @@ int Parse_PrintOrder(char *order);
 
 void AddStat(common_record_t *raw_record, master_record_t *flow_record );
 
-void PrintFlowTable(printer_t print_record, uint32_t limitflows, int tag, int GuessDir, extension_map_list_t *extension_map_list);
+void PrintFlowTable(printer_t print_record, outputParams_t *outputParams, int GuessDir, extension_map_list_t *extension_map_list);
 
-void PrintFlowStat(func_prolog_t record_header, printer_t print_record, int topN, int tag, int quiet, int cvs_output, extension_map_list_t *extension_map_list);
-
-void PrintElementStat(stat_record_t	*sum_stat, uint32_t limitflows, printer_t print_record, int topN, int tag, int quiet, int pipe_output, int cvs_output);
-
-int ParseListOrder(char *s, int multiple_orders );
+void PrintFlowStat(func_prolog_t record_header, printer_t print_record, outputParams_t *outputParams, extension_map_list_t *extension_map_list);
+void PrintElementStat(stat_record_t	*sum_stat, outputParams_t *outputParams, printer_t print_record);
 
 void PrintSortedFlows(printer_t print_record, uint32_t limitflows, int tag);
 
